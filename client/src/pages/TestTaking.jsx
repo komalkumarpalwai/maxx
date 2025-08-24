@@ -216,8 +216,10 @@ const TestTaking = () => {
   }
   // Enter full screen
   const enterFullScreen = () => {
-    if (testContainerRef.current && testContainerRef.current.requestFullscreen) {
-      testContainerRef.current.requestFullscreen().then(() => setFullScreen(true)).catch(() => setFullScreen(true));
+    // Try ref first, fallback to document.documentElement
+    const elem = testContainerRef.current || document.documentElement;
+    if (elem && elem.requestFullscreen) {
+      elem.requestFullscreen().then(() => setFullScreen(true)).catch(() => setFullScreen(true));
     } else {
       setFullScreen(true); // fallback
     }
@@ -249,20 +251,7 @@ const TestTaking = () => {
     const answersArray = Object.values(answers).map((a, idx) => ({
       selectedAnswer: typeof a.selectedAnswer === 'number' ? a.selectedAnswer : null
     }));
-    const unansweredQuestions = answersArray.filter(
-      answer => answer.selectedAnswer === null
-    );
-    if (unansweredQuestions.length > 0) {
-      const shouldSubmit = window.confirm(
-        `You have ${unansweredQuestions.length} unanswered questions. Are you sure you want to submit?`
-      );
-      if (!shouldSubmit) {
-        // Reset isSubmittingRef so auto-submit can trigger again
-        isSubmittingRef.current = false;
-        setIsSubmitting(false);
-        return;
-      }
-    }
+    // No need to check for unanswered questions; submit as-is
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
@@ -411,8 +400,6 @@ const TestTaking = () => {
         WebkitUserSelect: 'none',
         MozUserSelect: 'none',
         msUserSelect: 'none',
-        pointerEvents: showFullScreenMsg ? 'none' : 'auto',
-        filter: showFullScreenMsg ? 'blur(2px)' : 'none',
       }}
       onContextMenu={preventContextMenu}
       onCopy={preventCopyPaste}
@@ -420,6 +407,8 @@ const TestTaking = () => {
       onCut={preventCopyPaste}
       onSelectStart={preventTextSelect}
     >
+      {/* Blurred/frozen content when not fullscreen */}
+      <div style={{ pointerEvents: showFullScreenMsg ? 'none' : 'auto', filter: showFullScreenMsg ? 'blur(2px)' : 'none' }}>
       {/* Header */}
       <div className="mb-6">
         <Button 
@@ -475,10 +464,10 @@ const TestTaking = () => {
             onClick={() => goToQuestion(idx)}
             className={`w-8 h-8 rounded-full border text-sm font-bold focus:outline-none transition-colors duration-200
               ${currentQuestion === idx ? 'bg-blue-600 text-white border-blue-600' : answers[idx]?.selectedAnswer !== null ? 'bg-green-100 border-green-400 text-green-700' : 'bg-gray-100 border-gray-300 text-gray-700'}
-              ${!fullScreen ? 'opacity-50 cursor-not-allowed' : ''}`}
+              ${!fullScreen || showFullScreenMsg ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label={`Go to question ${idx + 1}`}
-            disabled={!fullScreen}
-            tabIndex={!fullScreen ? -1 : 0}
+            disabled={!fullScreen || showFullScreenMsg}
+            tabIndex={!fullScreen || showFullScreenMsg ? -1 : 0}
           >
             {idx + 1}
           </button>
@@ -486,7 +475,7 @@ const TestTaking = () => {
       </div>
 
       {/* Single Question View */}
-      <div className="card mb-6">
+      <div className="card mb-6" style={{ pointerEvents: showFullScreenMsg ? 'none' : 'auto', opacity: showFullScreenMsg ? 0.5 : 1 }}>
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-500">
@@ -509,6 +498,7 @@ const TestTaking = () => {
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-300 hover:border-gray-400'
               }`}
+              style={{ pointerEvents: showFullScreenMsg ? 'none' : 'auto', opacity: showFullScreenMsg ? 0.5 : 1 }}
             >
               <input
                 type="radio"
@@ -517,6 +507,7 @@ const TestTaking = () => {
                 checked={answers[currentQuestion]?.selectedAnswer === optionIndex}
                 onChange={() => handleAnswerSelect(currentQuestion, optionIndex)}
                 className="sr-only"
+                disabled={showFullScreenMsg}
               />
               <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
                 answers[currentQuestion]?.selectedAnswer === optionIndex
@@ -535,10 +526,10 @@ const TestTaking = () => {
 
       {/* Navigation Buttons */}
       <div className="flex justify-between mb-8">
-        <Button onClick={goToPrev} disabled={currentQuestion === 0 || !fullScreen} variant="secondary">
+        <Button onClick={goToPrev} disabled={currentQuestion === 0 || !fullScreen || showFullScreenMsg} variant="secondary">
           Previous
         </Button>
-        <Button onClick={goToNext} disabled={currentQuestion === test.questions.length - 1 || !fullScreen} variant="secondary">
+        <Button onClick={goToNext} disabled={currentQuestion === test.questions.length - 1 || !fullScreen || showFullScreenMsg} variant="secondary">
           Next
         </Button>
       </div>
@@ -548,7 +539,7 @@ const TestTaking = () => {
         <Button
           onClick={handleSubmitTest}
           loading={isSubmitting}
-          disabled={isSubmitting || !fullScreen}
+          disabled={isSubmitting || !fullScreen || showFullScreenMsg}
           size="lg"
           className="px-8"
         >
@@ -560,9 +551,10 @@ const TestTaking = () => {
         </p>
       </div>
 
+      </div>
       {/* Fullscreen required message overlay */}
       {showFullScreenMsg && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50" style={{ pointerEvents: 'auto' }}>
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto text-center">
             <h2 className="text-xl font-bold text-red-600 mb-4">Please switch to full screen to continue your exam.</h2>
             <p className="mb-4 text-gray-700">You must remain in full screen mode for the duration of the test. Navigation and answering are disabled until you return to full screen.</p>
@@ -575,3 +567,4 @@ const TestTaking = () => {
 };
 
 export default TestTaking;
+

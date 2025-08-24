@@ -3,6 +3,7 @@ const router = express.Router();
 const { auth, isAdmin } = require('../middlewares/auth');
 const Test = require('../models/Test');
 const TestResult = require('../models/TestResult');
+const { getTestAnalytics } = require('../controllers/analyticsController');
 
 // @desc    Get all tests (public - for students to see available tests)
 // @route   GET /api/tests
@@ -16,18 +17,13 @@ router.get('/', async (req, res) => {
         .populate('createdBy', 'name')
         .sort({ startDate: 1 });
     } else {
-      // Only return tests that are currently active (by time window and not manually deactivated)
-      const allTests = await Test.find({})
+      // Show all tests that are isActive: true (regardless of date)
+      tests = await Test.find({ isActive: true })
         .select('-questions')
         .populate('createdBy', 'name')
         .sort({ startDate: 1 });
-      tests = allTests.filter(test => test.getStatus() === 'active');
       // Debug log
-      console.log('All tests and their status:');
-      allTests.forEach(test => {
-        console.log(`Test: ${test.title}, Status: ${test.getStatus()}, isActive: ${test.isActive}, start: ${test.startDate}, end: ${test.endDate}, totalQuestions: ${test.totalQuestions}`);
-      });
-      console.log('Active tests:', tests.map(t => t.title));
+      console.log('isActive tests:', tests.map(t => t.title));
     }
 
     res.json({
@@ -253,7 +249,7 @@ router.delete('/:id', auth, isAdmin, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Test deleted successfully'
+      message: 'Test and related results deleted successfully'
     });
   } catch (error) {
     console.error('Delete test error:', error);
@@ -312,6 +308,10 @@ router.post('/:id/submit', auth, async (req, res) => {
     const testResult = new TestResult({
       student: req.user._id,
       test: test._id,
+      studentName: req.user.name,
+      studentRollNo: req.user.rollNo,
+      testTitle: test.title,
+      testCategory: test.category,
       score,
       totalScore,
       percentage,
@@ -349,6 +349,10 @@ router.post('/:id/submit', auth, async (req, res) => {
 // @access  Private
 router.get('/results/student', auth, async (req, res) => {
   try {
+    // Prevent querying for hardcoded admin/superadmin
+    if (req.user._id === 'admin' || req.user._id === 'superadmin') {
+      return res.json({ success: true, count: 0, results: [] });
+    }
     const results = await TestResult.find({ student: req.user._id })
       .populate('test', 'title category')
       .sort({ createdAt: -1 });
@@ -391,4 +395,8 @@ router.get('/results/all', auth, isAdmin, async (req, res) => {
   }
 });
 
+// Test analytics (admin only)
+router.get('/:id/analytics', auth, isAdmin, getTestAnalytics);
+
 module.exports = router;
+

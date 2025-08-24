@@ -2,9 +2,9 @@
 import api from './api';
 
 export const authService = {
-  async login(email, password) {
+  async login(email, password, recaptchaToken) {
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', { email, password, recaptchaToken });
       return response.data;
     } catch (error) {
       if (error.response && error.response.data) {
@@ -82,3 +82,4 @@ export const authService = {
     }
   }
 };
+

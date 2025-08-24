@@ -44,6 +44,8 @@ app.use('/api/auth', logoutRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/tests', require('./routes/leaderboard'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/audit-logs', require('./routes/auditLogs'));
 
 // Health check route
 app.get('/api/health', (req, res) => {

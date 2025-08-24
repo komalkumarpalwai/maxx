@@ -67,7 +67,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     default: "student",
-    enum: ['student', 'admin', 'faculty']
+    enum: ['student', 'admin', 'faculty', 'superadmin']
   },
   isActive: {
     type: Boolean,
@@ -108,7 +108,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 // Method to get user profile without password
 userSchema.methods.toProfileJSON = function() {
   return {
-    id: this._id,
+    _id: this._id,
     name: this.name,
     email: this.email,
     rollNo: this.rollNo,

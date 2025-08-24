@@ -161,8 +161,15 @@ function App() {
                 </ProtectedRoute>
               } />
 
+
               <Route path="/admin" element={
-                <ProtectedRoute requireAuth={true} requiredRole="admin">
+                <ProtectedRoute requireAuth={true} requiredRole={["admin", "superadmin"]}>
+                  <AdminPanel />
+                </ProtectedRoute>
+              } />
+
+              <Route path="/admin-panel" element={
+                <ProtectedRoute requireAuth={true} requiredRole={["admin", "superadmin"]}>
                   <AdminPanel />
                 </ProtectedRoute>
               } />

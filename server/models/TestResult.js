@@ -11,6 +11,11 @@ const testResultSchema = new mongoose.Schema({
     ref: 'Test',
     required: true
   },
+  // Store user and test info at submission time
+  studentName: { type: String },
+  studentRollNo: { type: String },
+  testTitle: { type: String },
+  testCategory: { type: String },
   score: {
     type: Number,
     required: true,
@@ -103,3 +108,4 @@ testResultSchema.pre('save', function(next) {
 });
 
 module.exports = mongoose.model('TestResult', testResultSchema);
+

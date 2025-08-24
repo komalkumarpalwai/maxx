@@ -14,9 +14,37 @@ const Navbar = () => {
   // Calculate remaining profile updates
   const remainingUpdates = userData ? 2 - (userData.profileUpdateCount || 0) : 2;
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const [showLogoutPrompt, setShowLogoutPrompt] = useState(false);
+  const [logoutPassword, setLogoutPassword] = useState('');
+  const [logoutError, setLogoutError] = useState('');
+  const [logoutLoading, setLogoutLoading] = useState(false);
+
+  const handleLogout = async () => {
+    if (user?.role === 'admin' || user?.role === 'superadmin') {
+      setShowLogoutPrompt(true);
+    } else {
+      logout();
+      navigate('/login');
+    }
+  };
+
+  const confirmLogout = async () => {
+    setLogoutLoading(true);
+    setLogoutError('');
+    try {
+      // Use adminLogin for admin/superadmin password check
+      await import('../services/authService').then(({ authService }) =>
+        authService.adminLogin(user.email, logoutPassword)
+      );
+      setShowLogoutPrompt(false);
+      setLogoutPassword('');
+      logout();
+      navigate('/login');
+    } catch (err) {
+      setLogoutError('Incorrect password.');
+    } finally {
+      setLogoutLoading(false);
+    }
   };
 
   const menuItems = [
@@ -89,6 +117,36 @@ const Navbar = () => {
                   <LogOut className="w-4 h-4" />
                   <span>Logout</span>
                 </button>
+      {/* Logout password prompt for admin/superadmin */}
+      {showLogoutPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-xs">
+            <h2 className="text-lg font-bold mb-2">Confirm Logout</h2>
+            <p className="mb-2 text-sm text-gray-700">Enter your password to logout:</p>
+            <input
+              type="password"
+              className="border rounded px-3 py-2 w-full mb-2"
+              placeholder="Password"
+              value={logoutPassword}
+              onChange={e => setLogoutPassword(e.target.value)}
+              disabled={logoutLoading}
+            />
+            {logoutError && <p className="text-red-600 text-sm mb-2">{logoutError}</p>}
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                className="px-3 py-1 rounded bg-gray-200 text-gray-700"
+                onClick={() => { setShowLogoutPrompt(false); setLogoutPassword(''); setLogoutError(''); }}
+                disabled={logoutLoading}
+              >Cancel</button>
+              <button
+                className="px-3 py-1 rounded bg-red-600 text-white"
+                onClick={confirmLogout}
+                disabled={logoutLoading || !logoutPassword}
+              >{logoutLoading ? 'Logging out...' : 'Logout'}</button>
+            </div>
+          </div>
+        </div>
+      )}
               </div>
             )}
           </div>

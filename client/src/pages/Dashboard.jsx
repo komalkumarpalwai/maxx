@@ -1,19 +1,28 @@
+
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { User, GraduationCap, Building, Calendar } from 'lucide-react';
 import Avatar from '../components/Avatar';
-
 import UserLatestResult from '../components/UserLatestResult';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
+
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTests, setActiveTests] = useState([]);
   const [loadingTests, setLoadingTests] = useState(true);
 
+
   useEffect(() => {
+    // Redirect admin/superadmin to admin panel
+    if (user && (user.role === 'admin' || user.role === 'superadmin')) {
+      navigate('/admin-panel', { replace: true });
+      return;
+    }
     fetchActiveTests();
-  }, []);
+  }, [user]);
 
   const fetchActiveTests = async () => {
     try {
@@ -129,9 +138,9 @@ const Dashboard = () => {
       </div>
 
       {/* User's Latest Result Section */}
-      <UserLatestResult user={user} />
     </div>
   );
 };
 
 export default Dashboard;
+

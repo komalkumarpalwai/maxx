@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import ReCAPTCHA from 'react-google-recaptcha';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import Button from '../components/Button';
@@ -15,13 +16,12 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [loginHint, setLoginHint] = useState('');
+  const [recaptchaToken, setRecaptchaToken] = useState('');
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  // Get the page user was trying to access, or default to dashboard
-  const from = location.state?.from?.pathname || '/';
+  // const location = useLocation();
 
   const validateForm = () => {
     const newErrors = {};
@@ -43,13 +43,21 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
+    if (!isLocalhost && !recaptchaToken) {
+      toast.error('Please complete the reCAPTCHA');
+      return;
+    }
     setLoading(true);
     setLoginHint(''); // Clear previous hints
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(formData.email, formData.password, false, recaptchaToken);
       if (result.success) {
         toast.success('Login successful!');
-        navigate(from, { replace: true }); // Redirect to intended page
+        if (result.user && result.user.role === 'superadmin') {
+          navigate('/admin-panel', { replace: true });
+        } else {
+          navigate('/profile', { replace: true });
+        }
       } else {
         // Show hint if available
         if (result.hint) {
@@ -156,6 +164,14 @@ const Login = () => {
               )}
             </div>
 
+            {!isLocalhost && (
+              <div className="mb-4">
+                <ReCAPTCHA
+                  sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY || 'YOUR_RECAPTCHA_SITE_KEY'}
+                  onChange={token => setRecaptchaToken(token)}
+                />
+              </div>
+            )}
             <Button
               type="submit"
               className="w-full"

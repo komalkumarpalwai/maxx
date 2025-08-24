@@ -22,8 +22,16 @@ const ProtectedRoute = ({ children, requireAuth = true, requiredRole }) => {
   }
 
   // If a requiredRole is specified, check user role
-  if (requireAuth && requiredRole && user?.role !== requiredRole) {
-    return <Navigate to="/" replace />;
+  if (requireAuth && requiredRole) {
+    if (Array.isArray(requiredRole)) {
+      if (!requiredRole.includes(user?.role)) {
+        return <Navigate to="/" replace />;
+      }
+    } else {
+      if (user?.role !== requiredRole) {
+        return <Navigate to="/" replace />;
+      }
+    }
   }
 
   // Redirect to dashboard if already authenticated and trying to access auth pages
@@ -35,3 +43,4 @@ const ProtectedRoute = ({ children, requireAuth = true, requiredRole }) => {
 };
 
 export default ProtectedRoute;
+

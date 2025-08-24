@@ -11,10 +11,25 @@ export const useAuth = () => {
   return context;
 };
 
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  // Session timeout: 15 minutes (900000 ms)
+  const SESSION_TIMEOUT = 15 * 60 * 1000;
+  let timeoutId = null;
+
+  // Reset session timer on user activity
+  const resetSessionTimer = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (token) {
+      timeoutId = setTimeout(() => {
+        logout();
+        alert('You have been logged out due to inactivity.');
+      }, SESSION_TIMEOUT);
+    }
+  };
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -34,7 +49,20 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, [token]);
 
-  const login = async (email, password, isAdmin = false) => {
+  // Setup session timeout listeners
+  useEffect(() => {
+    if (!token) return;
+    resetSessionTimer();
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(evt => window.addEventListener(evt, resetSessionTimer));
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(evt => window.removeEventListener(evt, resetSessionTimer));
+    };
+    // eslint-disable-next-line
+  }, [token]);
+
+  const login = async (email, password, isAdmin = false, recaptchaToken = '') => {
     try {
       let response;
       // Always use adminLogin route for hardcoded admin email
@@ -43,7 +71,7 @@ export const AuthProvider = ({ children }) => {
       } else if (isAdmin) {
         response = await authService.adminLogin(email, password);
       } else {
-        response = await authService.login(email, password);
+        response = await authService.login(email, password, recaptchaToken);
       }
       const { token: newToken, user: userData } = response;
       localStorage.setItem('token', newToken);
@@ -86,6 +114,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
+    if (timeoutId) clearTimeout(timeoutId);
   };
 
   const updateUser = (updatedUser) => {
