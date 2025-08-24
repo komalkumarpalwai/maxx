@@ -19,7 +19,8 @@ import AdminPanel from './pages/AdminPanel';
 import AdminAnalytics from './pages/AdminAnalytics';
 import { initializeSecurity } from './utils/security';
 import './index.css';
-import UnderDevelopment from './components/UnderDevelopment';
+import Academic from './pages/Academic';
+import Settings from './pages/Settings';
 
 function App() {
   useEffect(() => {
@@ -136,7 +137,7 @@ function App() {
                     <Sidebar />
                     <div className="flex-1">
                       <Navbar />
-                      <main className="p-6"><UnderDevelopment title="Academic" /></main>
+                      <main className="p-6"><Academic /></main>
                     </div>
                   </div>
                 </ProtectedRoute>
@@ -148,7 +149,7 @@ function App() {
                     <Sidebar />
                     <div className="flex-1">
                       <Navbar />
-                      <main className="p-6"><UnderDevelopment title="Settings" /></main>
+                      <main className="p-6"><Settings /></main>
                     </div>
                   </div>
                 </ProtectedRoute>

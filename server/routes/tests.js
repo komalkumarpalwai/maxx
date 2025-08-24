@@ -3,7 +3,23 @@ const router = express.Router();
 const { auth, isAdmin } = require('../middlewares/auth');
 const Test = require('../models/Test');
 const TestResult = require('../models/TestResult');
+
 const { getTestAnalytics } = require('../controllers/analyticsController');
+const { upload, uploadQuestionsCSV } = require('../controllers/csvController');
+// @desc    Upload questions via CSV (admin only)
+// @route   POST /api/tests/upload-csv
+// @access  Private (Admin)
+router.post('/upload-csv', auth, isAdmin, upload.single('file'), uploadQuestionsCSV);
+
+// @desc    Generate questions using AI (admin only, coming soon)
+// @route   POST /api/tests/generate-ai
+// @access  Private (Admin)
+router.post('/generate-ai', auth, isAdmin, (req, res) => {
+  res.status(501).json({
+    success: false,
+    message: 'AI question generation will be released for Admin and Faculty soon in future versions.'
+  });
+});
 
 // @desc    Get all tests (public - for students to see available tests)
 // @route   GET /api/tests
@@ -71,14 +87,16 @@ router.get('/:id', auth, async (req, res) => {
 
 
 
-    // Remove correct answers for students
+    // Remove correct answers for students, but include requireAllQuestions and allowNavigation
     const testForStudent = {
       ...test.toObject(),
       questions: test.questions.map(q => ({
         question: q.question,
         options: q.options,
         points: q.points
-      }))
+      })),
+      requireAllQuestions: test.requireAllQuestions,
+      allowNavigation: test.allowNavigation
     };
 
     res.json({
@@ -105,11 +123,11 @@ router.post('/', auth, isAdmin, async (req, res) => {
       const realAdmin = await require('../models/User').findOne({ role: 'admin', email: 'komalp@gmail.com' });
       if (realAdmin) createdBy = realAdmin._id;
     }
-    const { title, category, description } = req.body;
+    const { title, category, description, requireAllQuestions, allowNavigation } = req.body;
     if (!title || !category) {
       return res.status(400).json({ success: false, message: 'Title and category are required' });
     }
-    const test = new Test({ title, category, description, createdBy });
+    const test = new Test({ title, category, description, createdBy, requireAllQuestions, allowNavigation });
     await test.save();
     res.status(201).json({
       success: true,

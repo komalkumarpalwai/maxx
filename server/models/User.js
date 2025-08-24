@@ -82,6 +82,16 @@ const userSchema = new mongoose.Schema({
   tokenVersion: {
     type: Number,
     default: 0
+  },
+  theme: {
+    type: String,
+    enum: ['light', 'dark'],
+    default: 'light'
+  },
+  fontSize: {
+    type: String,
+    enum: ['normal', 'large', 'x-large'],
+    default: 'normal'
   }
 }, {
   timestamps: true
@@ -120,6 +130,8 @@ userSchema.methods.toProfileJSON = function() {
     isActive: this.isActive,
     profileUpdateCount: this.profileUpdateCount,
     passwordHint: this.passwordHint,
+    theme: this.theme,
+    fontSize: this.fontSize,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };

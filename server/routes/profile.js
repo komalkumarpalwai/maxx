@@ -12,8 +12,11 @@ const {
   createUser,
   adminUpdateUser,
   updateUserStatus,
-  resetUserPassword
+  resetUserPassword,
+  updatePreferences
 } = require('../controllers/profileController');
+// Update user preferences (theme, font size)
+router.put('/preferences', auth, updatePreferences);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({

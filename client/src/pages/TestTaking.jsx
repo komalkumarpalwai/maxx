@@ -233,16 +233,34 @@ const TestTaking = () => {
   };
 
   // Navigation (disabled if not fullscreen)
+  // Track visited questions for navigation coloring
+  const [visited, setVisited] = useState([]);
+  useEffect(() => {
+    if (!showInstructions && fullScreen) {
+      setVisited(v => {
+        if (!v.includes(currentQuestion)) {
+          return [...v, currentQuestion];
+        }
+        return v;
+      });
+    }
+    // eslint-disable-next-line
+  }, [currentQuestion, showInstructions, fullScreen]);
+
+  // Navigation logic with allowNavigation
   const goToNext = () => {
     if (!fullScreen) return;
+    if (test && test.allowNavigation === false) return;
     setCurrentQuestion((prev) => Math.min(prev + 1, test.questions.length - 1));
   };
   const goToPrev = () => {
     if (!fullScreen) return;
+    if (test && test.allowNavigation === false) return;
     setCurrentQuestion((prev) => Math.max(prev - 1, 0));
   };
   const goToQuestion = (idx) => {
     if (!fullScreen) return;
+    if (test && test.allowNavigation === false) return;
     setCurrentQuestion(idx);
   };
   const handleSubmitTest = async () => {
@@ -251,7 +269,14 @@ const TestTaking = () => {
     const answersArray = Object.values(answers).map((a, idx) => ({
       selectedAnswer: typeof a.selectedAnswer === 'number' ? a.selectedAnswer : null
     }));
-    // No need to check for unanswered questions; submit as-is
+    // If requireAllQuestions, check all answered
+    if (test && test.requireAllQuestions) {
+      const unanswered = answersArray.find(a => a.selectedAnswer === null);
+      if (unanswered) {
+        toast.error('You must attempt all questions before submitting.');
+        return;
+      }
+    }
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
@@ -458,20 +483,31 @@ const TestTaking = () => {
 
       {/* Question Navigation */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {test.questions.map((_, idx) => (
-          <button
-            key={idx}
-            onClick={() => goToQuestion(idx)}
-            className={`w-8 h-8 rounded-full border text-sm font-bold focus:outline-none transition-colors duration-200
-              ${currentQuestion === idx ? 'bg-blue-600 text-white border-blue-600' : answers[idx]?.selectedAnswer !== null ? 'bg-green-100 border-green-400 text-green-700' : 'bg-gray-100 border-gray-300 text-gray-700'}
-              ${!fullScreen || showFullScreenMsg ? 'opacity-50 cursor-not-allowed' : ''}`}
-            aria-label={`Go to question ${idx + 1}`}
-            disabled={!fullScreen || showFullScreenMsg}
-            tabIndex={!fullScreen || showFullScreenMsg ? -1 : 0}
-          >
-            {idx + 1}
-          </button>
-        ))}
+        {test.questions.map((_, idx) => {
+          let navColor = '';
+          if (answers[idx]?.selectedAnswer !== null) {
+            navColor = 'bg-green-500 text-white border-green-600'; // Attempted: green
+          } else if (visited.includes(idx)) {
+            navColor = 'bg-red-500 text-white border-red-600'; // Visited but not attempted: red
+          } else {
+            navColor = 'bg-gray-800 text-white border-gray-900'; // Not visited: dark gray
+          }
+          if (currentQuestion === idx) {
+            navColor = 'bg-blue-600 text-white border-blue-600'; // Current: blue
+          }
+          return (
+            <button
+              key={idx}
+              onClick={() => goToQuestion(idx)}
+              className={`w-8 h-8 rounded-full border text-sm font-bold focus:outline-none transition-colors duration-200 ${navColor} ${!fullScreen || showFullScreenMsg || (test.allowNavigation === false && idx !== currentQuestion) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              aria-label={`Go to question ${idx + 1}`}
+              disabled={!fullScreen || showFullScreenMsg || (test.allowNavigation === false && idx !== currentQuestion)}
+              tabIndex={!fullScreen || showFullScreenMsg ? -1 : 0}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
       </div>
 
       {/* Single Question View */}
@@ -526,10 +562,10 @@ const TestTaking = () => {
 
       {/* Navigation Buttons */}
       <div className="flex justify-between mb-8">
-        <Button onClick={goToPrev} disabled={currentQuestion === 0 || !fullScreen || showFullScreenMsg} variant="secondary">
+        <Button onClick={goToPrev} disabled={currentQuestion === 0 || !fullScreen || showFullScreenMsg || (test.allowNavigation === false)} variant="secondary">
           Previous
         </Button>
-        <Button onClick={goToNext} disabled={currentQuestion === test.questions.length - 1 || !fullScreen || showFullScreenMsg} variant="secondary">
+        <Button onClick={goToNext} disabled={currentQuestion === test.questions.length - 1 || !fullScreen || showFullScreenMsg || (test.allowNavigation === false)} variant="secondary">
           Next
         </Button>
       </div>
@@ -547,7 +583,7 @@ const TestTaking = () => {
           Submit Test
         </Button>
         <p className="text-sm text-gray-500 mt-2">
-          Make sure to review all your answers before submitting
+          {test.requireAllQuestions ? 'You must attempt all questions before submitting.' : 'You can submit without answering all questions.'}
         </p>
       </div>
 

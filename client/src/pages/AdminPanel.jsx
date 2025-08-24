@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api from '../services/api';
 import CreateTestForm from '../components/CreateTestForm';
-import ManageTestsTable from '../components/ManageTestsTable';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
@@ -9,6 +9,8 @@ import AdminExamResults from './AdminExamResults';
 import UserManagement from './UserManagement';
 import TestAnalytics from './TestAnalytics';
 import SuperAdminPanel from './SuperAdminPanel';
+const ManageTestsTable = lazy(() => import('../components/ManageTestsTable'));
+
 
 const sidebarItems = [
   { key: 'create', label: 'Create Test' },
@@ -147,16 +149,18 @@ const AdminPanel = () => {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white shadow md:h-screen flex flex-row md:flex-col justify-between md:justify-between fixed md:static z-20 top-0 left-0 md:relative">
+      <aside className="w-full md:w-64 bg-white shadow md:h-screen flex flex-row md:flex-col justify-between md:justify-between fixed md:static z-20 top-0 left-0 md:relative" aria-label="Admin sidebar navigation">
         <div className="w-full">
-          <h1 className="text-2xl font-bold text-center py-4 border-b">Maxx Solutions</h1>
+          <h1 className="text-2xl font-bold text-center py-4 border-b" aria-label="Maxx Solutions Admin Panel">Maxx Solutions</h1>
           <div className="text-center text-xs text-gray-500 mb-2">Admin Panel</div>
-          <nav className="flex flex-row md:flex-col gap-1 p-2 md:p-4 overflow-x-auto md:overflow-x-visible">
+          <nav className="flex flex-row md:flex-col gap-1 p-2 md:p-4 overflow-x-auto md:overflow-x-visible" aria-label="Sidebar navigation" role="navigation">
             {sidebarItems.map(item => (
               <button
                 key={item.key}
                 className={`text-left px-4 py-2 rounded transition-all ${section === item.key ? 'bg-blue-600 text-white font-semibold' : 'hover:bg-blue-100 text-gray-700'}`}
                 onClick={() => setSection(item.key)}
+                aria-label={item.label}
+                tabIndex={0}
               >
                 {item.label}
               </button>
@@ -165,6 +169,8 @@ const AdminPanel = () => {
               <button
                 className={`text-left px-4 py-2 rounded transition-all ${section === 'superadmin' ? 'bg-purple-700 text-white font-semibold' : 'hover:bg-purple-100 text-gray-700'}`}
                 onClick={() => setSection('superadmin')}
+                aria-label="Superadmin section"
+                tabIndex={0}
               >
                 Superadmin
               </button>
@@ -172,17 +178,19 @@ const AdminPanel = () => {
             <button
               className={`text-left px-4 py-2 rounded transition-all ${section === 'changepw' ? 'bg-green-600 text-white font-semibold' : 'hover:bg-green-100 text-gray-700'}`}
               onClick={() => setSection('changepw')}
+              aria-label="Change Password"
+              tabIndex={0}
             >
               Change Password
             </button>
           </nav>
         </div>
         <div className="p-4 border-t">
-          <Button variant="danger" className="w-full" onClick={logout}>Logout</Button>
+          <Button variant="danger" className="w-full" onClick={logout} aria-label="Logout">Logout</Button>
         </div>
       </aside>
       {/* Main Content */}
-  <main className="flex-1 p-2 md:p-8 overflow-y-auto mt-20 md:mt-0">
+      <main className="flex-1 p-2 md:p-8 overflow-y-auto mt-20 md:mt-0" aria-label="Admin main content" role="main">
         {/* Dashboard Overview */}
         {section === 'create' && (
           <div>
@@ -211,7 +219,9 @@ const AdminPanel = () => {
         {section === 'manage' && (
           <div>
             <h2 className="text-xl font-semibold mb-4">Manage & Update Tests</h2>
-            <ManageTestsTable />
+            <Suspense fallback={<div className="flex items-center justify-center py-8" role="status" aria-live="polite"><svg className="animate-spin h-8 w-8 text-blue-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg><span>Loading tests...</span></div>}>
+              <ManageTestsTable />
+            </Suspense>
           </div>
         )}
         {section === 'users' && (
@@ -226,18 +236,25 @@ const AdminPanel = () => {
                 setSearch(e.target.value);
                 setCurrentPage(1); // Reset to first page on search
               }}
+              aria-label="Search users"
             />
             {loading ? (
-              <p>Loading...</p>
+              <div className="flex items-center justify-center py-8" role="status" aria-live="polite">
+                <svg className="animate-spin h-8 w-8 text-blue-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                </svg>
+                <span>Loading users...</span>
+              </div>
             ) : error ? (
               <p className="text-red-600">{error}</p>
             ) : (
               <>
                 {/* Bulk Actions */}
                 <div className="flex flex-wrap gap-2 mb-2" role="group" aria-label="Bulk actions">
-                  <button className="bg-green-600 text-white px-3 py-1 rounded" onClick={handleBulkActivate} disabled={selectedUserIds.length === 0} tabIndex={0}>Activate</button>
-                  <button className="bg-yellow-600 text-white px-3 py-1 rounded" onClick={handleBulkDeactivate} disabled={selectedUserIds.length === 0} tabIndex={0}>Deactivate</button>
-                  <button className="bg-red-600 text-white px-3 py-1 rounded" onClick={handleBulkDelete} disabled={selectedUserIds.length === 0} tabIndex={0}>Delete</button>
+                  <button className="bg-green-600 text-white px-3 py-1 rounded" onClick={handleBulkActivate} disabled={selectedUserIds.length === 0} tabIndex={0} aria-label="Activate selected users">Activate</button>
+                  <button className="bg-yellow-600 text-white px-3 py-1 rounded" onClick={handleBulkDeactivate} disabled={selectedUserIds.length === 0} tabIndex={0} aria-label="Deactivate selected users">Deactivate</button>
+                  <button className="bg-red-600 text-white px-3 py-1 rounded" onClick={handleBulkDelete} disabled={selectedUserIds.length === 0} tabIndex={0} aria-label="Delete selected users">Delete</button>
                   <span className="text-xs text-gray-500 ml-2">{selectedUserIds.length} selected</span>
                 </div>
                 <div className="overflow-x-auto w-full">
@@ -261,7 +278,7 @@ const AdminPanel = () => {
                         const userResults = results.filter(r => r.student && (r.student._id === user._id || r.student === user._id));
                         const lastActivity = userResults.length > 0 ? new Date(userResults[0].createdAt).toLocaleString() : '—';
                         return (
-                          <tr key={user._id} className="cursor-pointer hover:bg-blue-50 focus-within:bg-blue-100" tabIndex={0} aria-label={`User ${user.name}`} onKeyDown={e => {if(e.key==='Enter'){setSelectedUser(user);}}}>
+                          <tr key={user._id} className="cursor-pointer hover:bg-blue-50 focus-within:bg-blue-100" tabIndex={0} aria-label={`User ${user.name}`} onKeyDown={e => {if(e.key==='Enter'){setSelectedUser(user);}}} role="row">
                             <td className="border px-2 py-1 text-center">
                               <input type="checkbox" aria-label={`Select user ${user.name}`} checked={selectedUserIds.includes(user._id)} onChange={() => handleSelectUser(user._id)} tabIndex={0} />
                             </td>
@@ -277,12 +294,13 @@ const AdminPanel = () => {
                       })}
         {/* User Details Modal */}
         {selectedUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40" role="dialog" aria-modal="true" aria-label="User Details Modal">
             <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
               <button
                 className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl"
                 onClick={() => setSelectedUser(null)}
-                aria-label="Close"
+                aria-label="Close user details modal"
+                tabIndex={0}
               >
                 &times;
               </button>
@@ -417,7 +435,13 @@ const AdminPanel = () => {
           <div>
             <h2 className="text-xl font-semibold mb-4">Audit Logs</h2>
             {auditLoading ? (
-              <p>Loading...</p>
+              <div className="flex items-center justify-center py-8" role="status" aria-live="polite">
+                <svg className="animate-spin h-8 w-8 text-blue-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                </svg>
+                <span>Loading audit logs...</span>
+              </div>
             ) : auditError ? (
               <div className="bg-yellow-100 text-yellow-800 p-4 rounded mb-4">
                 <p className="font-semibold">Audit log feature will be released for Admin and Faculty soon.</p>

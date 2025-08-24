@@ -1,3 +1,34 @@
+// @desc    Update user preferences (theme, font size)
+// @route   PUT /api/profile/preferences
+// @access  Private
+const updatePreferences = async (req, res) => {
+  try {
+    const { theme, fontSize } = req.body;
+    const updateFields = {};
+    if (theme) updateFields.theme = theme;
+    if (fontSize) updateFields.fontSize = fontSize;
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    ).select('-password');
+    res.json({
+      message: 'Preferences updated successfully',
+      preferences: {
+        theme: user.theme,
+        fontSize: user.fontSize
+      }
+    });
+    // Audit log
+    await logAction('update_preferences', req.user._id, { preferences: updateFields });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({
+      message: 'Server error while updating preferences',
+      error: error.message
+    });
+  }
+};
 const User = require('../models/User');
 const validator = require('validator');
 const { logAction } = require('./auditLogController');
@@ -283,5 +314,6 @@ module.exports = {
   createUser,
   adminUpdateUser,
   updateUserStatus,
-  resetUserPassword
+  resetUserPassword,
+  updatePreferences
 };

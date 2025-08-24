@@ -10,6 +10,8 @@ const CreateTestForm = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [requireAllQuestions, setRequireAllQuestions] = useState(true);
+  const [allowNavigation, setAllowNavigation] = useState(true);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,10 +21,14 @@ const CreateTestForm = () => {
         title,
         category: tab,
         description,
-        instructions
+        instructions,
+        requireAllQuestions,
+        allowNavigation
       });
       setSuccess('Test created successfully!');
-      setTitle(''); setDescription(''); setInstructions('');
+  setTitle(''); setDescription(''); setInstructions('');
+  setRequireAllQuestions(true);
+  setAllowNavigation(true);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create test');
     } finally {
@@ -50,6 +56,24 @@ const CreateTestForm = () => {
             onChange={e => setInstructions(e.target.value)}
             rows={4}
           />
+        </div>
+        <div className="flex flex-col md:flex-row gap-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={requireAllQuestions}
+              onChange={e => setRequireAllQuestions(e.target.checked)}
+            />
+            Require all questions to be answered before submit
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={allowNavigation}
+              onChange={e => setAllowNavigation(e.target.checked)}
+            />
+            Allow navigation between questions
+          </label>
         </div>
         {error && <div className="text-red-600">{error}</div>}
         {success && <div className="text-green-600">{success}</div>}

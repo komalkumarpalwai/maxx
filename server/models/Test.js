@@ -63,7 +63,17 @@ const testSchema = new mongoose.Schema({
       type: Number,
       default: 1
     }
-  }]
+  }],
+  requireAllQuestions: {
+    type: Boolean,
+    default: true,
+    description: 'If true, student must answer all questions to submit.'
+  },
+  allowNavigation: {
+    type: Boolean,
+    default: true,
+    description: 'If false, student cannot navigate between questions.'
+  }
 }, {
   timestamps: true
 });
