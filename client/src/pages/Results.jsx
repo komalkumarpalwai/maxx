@@ -7,8 +7,6 @@ const Results = () => {
   const { user } = useAuth();
   const [tests, setTests] = useState([]);
   const [selectedTest, setSelectedTest] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [userResult, setUserResult] = useState(null);
 
   useEffect(() => {

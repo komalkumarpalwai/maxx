@@ -10,7 +10,7 @@ const Tests = () => {
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [attemptedTestIds, setAttemptedTestIds] = useState([]);
-  const { user } = useAuth();
+  // const { user } = useAuth(); // Not used
   const navigate = useNavigate();
 
   useEffect(() => {

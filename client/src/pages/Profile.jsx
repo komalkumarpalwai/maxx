@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useUser } from '../context/UserContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Save, X, User, Mail, GraduationCap, Building, Hash, AlertTriangle, Info } from 'lucide-react';
+import { Camera, Save, X, Mail, Hash, AlertTriangle, Info } from 'lucide-react';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Select from '../components/Select';

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
-import { Menu, LogOut, User, Settings, Info } from 'lucide-react';
+import { Menu, LogOut, User, Settings } from 'lucide-react';
 import Avatar from './Avatar';
 
 const Navbar = () => {

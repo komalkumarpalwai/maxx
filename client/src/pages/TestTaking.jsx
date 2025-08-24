@@ -21,11 +21,11 @@ const TestTaking = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [fullScreen, setFullScreen] = useState(false);
   // Security: Tab switch/blur warnings
-  const [warningCount, setWarningCount] = useState(0);
+  const [ , setWarningCount] = useState(0); // Remove warningCount variable
   const [showFullScreenMsg, setShowFullScreenMsg] = useState(false);
   const testContainerRef = useRef(null);
   const [alreadyAttempted, setAlreadyAttempted] = useState(false);
-  const { user } = useAuth();
+  // const { user } = useAuth(); // Not used
   // Mobile device detection
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
