@@ -67,10 +67,25 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ message: 'Route not found' });
-});
+
+// Serve React app for all non-API, non-static routes (for client-side routing)
+if (process.env.NODE_ENV === 'production') {
+  const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
+  app.use(express.static(clientBuildPath));
+  app.get('*', (req, res) => {
+    // If the request does not start with /api or /uploads, serve index.html
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    } else {
+      res.status(404).json({ message: 'Route not found' });
+    }
+  });
+} else {
+  // 404 handler for development
+  app.use('*', (req, res) => {
+    res.status(404).json({ message: 'Route not found' });
+  });
+}
 
 
 // Create default admin if none exists
