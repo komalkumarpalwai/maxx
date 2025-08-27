@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line
   }, [token]);
 
-  const login = async (email, password, isAdmin = false, recaptchaToken = '') => {
+  const login = async (email, password, isAdmin = false) => {
     try {
       let response;
       // Always use adminLogin route for hardcoded admin email
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }) => {
       } else if (isAdmin) {
         response = await authService.adminLogin(email, password);
       } else {
-        response = await authService.login(email, password, recaptchaToken);
+        response = await authService.login(email, password);
       }
       const { token: newToken, user: userData } = response;
       localStorage.setItem('token', newToken);

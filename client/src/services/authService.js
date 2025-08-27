@@ -2,9 +2,9 @@
 import api from './api';
 
 export const authService = {
-  async login(email, password, recaptchaToken) {
+  async login(email, password) {
     try {
-      const response = await api.post('/auth/login', { email, password, recaptchaToken });
+      const response = await api.post('/auth/login', { email, password });
       return response.data;
     } catch (error) {
       if (error.response && error.response.data) {

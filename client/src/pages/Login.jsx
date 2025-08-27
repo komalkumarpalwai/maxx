@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import ReCAPTCHA from 'react-google-recaptcha';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
@@ -16,8 +15,6 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [loginHint, setLoginHint] = useState('');
-  const [recaptchaToken, setRecaptchaToken] = useState('');
-  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -43,14 +40,10 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-    if (!isLocalhost && !recaptchaToken) {
-      toast.error('Please complete the reCAPTCHA');
-      return;
-    }
     setLoading(true);
     setLoginHint(''); // Clear previous hints
     try {
-      const result = await login(formData.email, formData.password, false, recaptchaToken);
+      const result = await login(formData.email, formData.password, false);
       if (result.success) {
         toast.success('Login successful!');
         if (result.user && result.user.role === 'superadmin') {
@@ -164,14 +157,7 @@ const Login = () => {
               )}
             </div>
 
-            {!isLocalhost && (
-              <div className="mb-4">
-                <ReCAPTCHA
-                  sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY || 'YOUR_RECAPTCHA_SITE_KEY'}
-                  onChange={token => setRecaptchaToken(token)}
-                />
-              </div>
-            )}
+
             <Button
               type="submit"
               className="w-full"
