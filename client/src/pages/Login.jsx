@@ -5,6 +5,7 @@ import { Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import toast from 'react-hot-toast';
+import ConnectionTest from '../components/ConnectionTest';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -15,6 +16,9 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [loginHint, setLoginHint] = useState('');
+  
+  // Debug: Show current API URL
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -99,6 +103,12 @@ const Login = () => {
           <p className="mt-2 text-sm text-gray-600">
             Sign in to your Max Solutions account
           </p>
+          {/* Debug info - remove after fixing */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-2 p-2 bg-yellow-100 rounded text-xs">
+              API URL: {apiUrl}
+            </div>
+          )}
         </div>
 
         <div className="card">
@@ -179,6 +189,11 @@ const Login = () => {
               </Link>
             </p>
           </div>
+        </div>
+        
+        {/* Connection Test - Remove after fixing */}
+        <div className="mt-8">
+          <ConnectionTest />
         </div>
       </div>
     </div>
