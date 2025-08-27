@@ -81,21 +81,9 @@ const register = async (req, res) => {
 // @desc    Login user (all roles)
 // @route   POST /api/auth/login
 // @access  Public
-const { verifyRecaptcha } = require('../utils/recaptcha');
 const login = async (req, res) => {
   try {
-    const { email, password, recaptchaToken } = req.body;
-    // Only require reCAPTCHA if not running on localhost
-    const isLocalhost = req.headers.host && (req.headers.host.startsWith('localhost') || req.headers.host.startsWith('127.0.0.1'));
-    if (!isLocalhost) {
-      if (!recaptchaToken) {
-        return res.status(400).json({ message: 'reCAPTCHA verification failed. Please try again.' });
-      }
-      const recaptchaOk = await verifyRecaptcha(recaptchaToken);
-      if (!recaptchaOk) {
-        return res.status(400).json({ message: 'reCAPTCHA failed. Please try again.' });
-      }
-    }
+    const { email, password } = req.body;
     // Find user by email
     const user = await User.findOne({ email });
     if (!user) {

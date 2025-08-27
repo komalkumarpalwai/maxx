@@ -428,7 +428,7 @@ router.post('/:id/submit', auth, async (req, res) => {
         message: 'You have already attempted this test.'
       });
     }
-    let { answers, timeTaken, autoSubmit } = req.body;
+  let { answers, timeTaken } = req.body;
     const test = await Test.findById(req.params.id);
     if (!test) {
       return res.status(404).json({ 
@@ -437,15 +437,8 @@ router.post('/:id/submit', auth, async (req, res) => {
       });
     }
 
-    // When autoSubmit (e.g., due to violations/time), bypass requireAllQuestions hard requirement
-    // and pad answers to length of questions
-    if (autoSubmit) {
-      if (!answers || !Array.isArray(answers)) answers = [];
-      const padded = Array(test.questions.length).fill({});
-      for (let i = 0; i < answers.length && i < padded.length; i++) padded[i] = answers[i] || {};
-      answers = padded;
-    } else if (test.requireAllQuestions) {
-      // Enforce required answers only for normal submissions
+    // Enforce required answers if requireAllQuestions is true
+    if (test.requireAllQuestions) {
       if (!answers || answers.length !== test.questions.length || answers.some(a => a.selectedAnswer === undefined || a.selectedAnswer === null)) {
         return res.status(400).json({
           success: false,
@@ -481,41 +474,18 @@ router.post('/:id/submit', auth, async (req, res) => {
     }
 
     let score = 0;
-    // Allow skipped answers if not required or when autoSubmit forced
+    // Allow skipped answers if requireAllQuestions is false
     const processedAnswers = test.questions.map((question, index) => {
       const answer = answers && answers[index] ? answers[index] : {};
-
-      // Normalize selected to an index (number) or null
-      let selectedIndex = null;
-      if (answer.selectedAnswer !== undefined && answer.selectedAnswer !== null) {
-        const sel = answer.selectedAnswer;
-        if (Array.isArray(sel)) {
-          // take first element for single-choice legacy payloads
-          if (sel.length > 0) {
-            const first = sel[0];
-            if (typeof first === 'number') {
-              selectedIndex = first;
-            } else if (typeof first === 'string') {
-              selectedIndex = question.options.findIndex(o => o === first);
-              if (selectedIndex === -1) selectedIndex = null;
-            }
-          }
-        } else if (typeof sel === 'number') {
-          selectedIndex = sel;
-        } else if (typeof sel === 'string') {
-          selectedIndex = question.options.findIndex(o => o === sel);
-          if (selectedIndex === -1) selectedIndex = null;
-        }
-      }
-
-      const isCorrect = selectedIndex !== null && selectedIndex === question.correctAnswer;
+      const selectedAnswer = (answer.selectedAnswer !== undefined && answer.selectedAnswer !== null) ? answer.selectedAnswer : null;
+      const isCorrect = selectedAnswer === question.correctAnswer;
       const points = isCorrect ? question.points : 0;
-      if (selectedIndex !== null) score += points;
+      if (selectedAnswer !== null) score += points;
       return {
         questionIndex: index,
-        selectedAnswer: selectedIndex, // store index to satisfy schema
-        isCorrect: selectedIndex !== null ? isCorrect : false,
-        points: selectedIndex !== null ? points : 0
+        selectedAnswer,
+        isCorrect: selectedAnswer !== null ? isCorrect : false,
+        points: selectedAnswer !== null ? points : 0
       };
     });
     const totalScore = test.questions.reduce((sum, q) => sum + q.points, 0);
