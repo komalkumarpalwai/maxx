@@ -48,7 +48,7 @@ const testResultSchema = new mongoose.Schema({
     },
     selectedAnswer: {
       type: Number,
-      required: true
+      required: false // allow null/undefined if skipping is allowed
     },
     isCorrect: {
       type: Boolean,
@@ -108,4 +108,6 @@ testResultSchema.pre('save', function(next) {
 });
 
 module.exports = mongoose.model('TestResult', testResultSchema);
+
+
 

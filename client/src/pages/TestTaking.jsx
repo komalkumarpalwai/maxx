@@ -1,604 +1,492 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { CheckCircle, AlertCircle, ArrowLeft, Maximize2 } from 'lucide-react';
-// import { useAuth } from '../context/AuthContext';
-import Button from '../components/Button';
-import toast from 'react-hot-toast';
-import api from '../services/api';
+import React, { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import Button from "../components/Button";
+import toast from "react-hot-toast";
+import api from "../services/api";
+
+const VIOLATION_LIMIT = 2;
+const LOW_TIME_WARNING = 120;
+
+function getQuestionKey(q, idx) {
+  return q?._id ? String(q._id) : `q-${idx}`;
+}
+function isSingleType(q) {
+  const t = (q?.type || "").toLowerCase();
+  if (t === "single" || t === "radio" || t === "single-choice") return true;
+  // Fallback: if only two options and no type, treat as single-choice
+  if (!q?.type && Array.isArray(q?.options) && q.options.length === 2) return true;
+  return false;
+}
+function formatTime(sec) {
+  if (typeof sec !== "number" || sec < 0) return "--:--";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 const TestTaking = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  // const { user } = useAuth(); // Not used
   const [test, setTest] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(true);
-  const [agreed, setAgreed] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [fullScreen, setFullScreen] = useState(false);
-  // Security: Tab switch/blur warnings
-  const [ , setWarningCount] = useState(0); // Remove warningCount variable
-  const [showFullScreenMsg, setShowFullScreenMsg] = useState(false);
-  const testContainerRef = useRef(null);
+  const [error, setError] = useState("");
   const [alreadyAttempted, setAlreadyAttempted] = useState(false);
-  // const { user } = useAuth(); // Not used
-  // Mobile device detection
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const checkMobile = () => {
-      const ua = navigator.userAgent;
-      setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua));
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const [attemptCheckLoading, setAttemptCheckLoading] = useState(true);
+  const [answers, setAnswers] = useState({});
+  const [visited, setVisited] = useState(new Set());
+  const [markForReview, setMarkForReview] = useState({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [durationMinutes, setDurationMinutes] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const [testStarted, setTestStarted] = useState(false);
+  const [resumeAvailable, setResumeAvailable] = useState(false);
+  const [agreeInstructions, setAgreeInstructions] = useState(false);
+  const [violations, setViolations] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isSubmittingRef = useRef(false);
+  const warnedRef = useRef(false);
+  const answersRef = useRef(answers);
+  const durationRef = useRef(durationMinutes);
+  const localStorageKey = `testState-${id}`;
 
   useEffect(() => {
-    // Reset warnings and state on mount (refresh)
-    setWarningCount(0);
-    setShowFullScreenMsg(false);
-    checkAlreadyAttempted();
-    // Clean up event listeners on unmount
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('fullscreenchange', handleFullScreenChange);
-      window.removeEventListener('blur', handleWindowBlur);
-      document.removeEventListener('contextmenu', preventContextMenu, true);
-      document.removeEventListener('keydown', preventShortcuts, true);
-      document.removeEventListener('copy', preventCopyPaste, true);
-      document.removeEventListener('paste', preventCopyPaste, true);
-      document.removeEventListener('cut', preventCopyPaste, true);
-      document.removeEventListener('selectstart', preventTextSelect, true);
-    };
-    // eslint-disable-next-line
+    answersRef.current = answers;
+  }, [answers]);
+  useEffect(() => {
+    durationRef.current = durationMinutes;
+  }, [durationMinutes]);
+
+  // Restore state
+  useEffect(() => {
+    const raw = localStorage.getItem(localStorageKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      setAnswers(parsed.answers || {});
+      setCurrentQuestionIndex(
+        Number.isInteger(parsed.currentQuestionIndex)
+          ? parsed.currentQuestionIndex
+          : 0
+      );
+      setVisited(
+        Array.isArray(parsed.visited) ? new Set(parsed.visited) : new Set()
+      );
+      setMarkForReview(parsed.markForReview || {});
+      setTimeLeft(
+        typeof parsed.timeLeft === "number" ? parsed.timeLeft : null
+      );
+      setTestStarted(false);
+      setResumeAvailable(
+        parsed.testStarted ||
+          Object.keys(parsed.answers || {}).length > 0 ||
+          parsed.timeLeft !== null
+      );
+    } catch {}
   }, [id]);
 
-  const checkAlreadyAttempted = async () => {
-    try {
-      const res = await api.get('/tests/results/student');
-      if (res.data.success) {
-        const attempted = res.data.results.find(r => (r.test && (r.test._id === id || r.test === id)));
-        if (attempted) {
-          setAlreadyAttempted(true);
-          setLoading(false);
-          return;
+  // Fetch test and attempt check
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setAttemptCheckLoading(true);
+      setError("");
+      try {
+        const res = await api.get("/tests/results/student");
+        if (res?.data?.results) {
+          const attempted = res.data.results.some(
+            (r) => r.test && (r.test._id === id || r.test === id)
+          );
+          if (attempted) setAlreadyAttempted(true);
         }
+        const { data } = await api.get(`/tests/${id}`);
+        if (cancelled) return;
+        const testObj = data.test || data;
+        if (
+          !testObj ||
+          !Array.isArray(testObj.questions) ||
+          testObj.questions.length === 0
+        ) {
+          setError("Test not found or has no questions.");
+          setTest(null);
+        } else {
+          setTest(testObj);
+          const dur =
+            Number(testObj?.duration) ||
+            Number(testObj?.durationMinutes) ||
+            null;
+          setDurationMinutes(dur);
+          durationRef.current = dur;
+          if (timeLeft === null && dur !== null) setTimeLeft(dur * 60);
+        }
+      } catch (err) {
+        setError("Failed to load test.");
+        setTest(null);
+      } finally {
+        setLoading(false);
+        setAttemptCheckLoading(false);
       }
-      // If not attempted, fetch test as usual
-      fetchTest();
-    } catch {
-      setLoading(false);
-    }
-  };
-
-  // Timer effect, robust to function reference
-  useEffect(() => {
-    if (!showInstructions && timeLeft > 0) {
-      const timer = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            // Use setTimeout to avoid React state update in unmounted component
-            setTimeout(() => handleSubmitTest(), 0);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-    // eslint-disable-next-line
-  }, [showInstructions, timeLeft]);
-
-  // Full screen and security event listeners
-  // Security and event listeners
-  useEffect(() => {
-    if (!showInstructions && fullScreen) {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      document.addEventListener('fullscreenchange', handleFullScreenChange);
-      window.addEventListener('blur', handleWindowBlur);
-      document.addEventListener('contextmenu', preventContextMenu, true);
-      document.addEventListener('keydown', preventShortcuts, true);
-      document.addEventListener('copy', preventCopyPaste, true);
-      document.addEventListener('paste', preventCopyPaste, true);
-      document.addEventListener('cut', preventCopyPaste, true);
-      document.addEventListener('selectstart', preventTextSelect, true);
-    }
+    })();
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('fullscreenchange', handleFullScreenChange);
-      window.removeEventListener('blur', handleWindowBlur);
-      document.removeEventListener('contextmenu', preventContextMenu, true);
-      document.removeEventListener('keydown', preventShortcuts, true);
-      document.removeEventListener('copy', preventCopyPaste, true);
-      document.removeEventListener('paste', preventCopyPaste, true);
-      document.removeEventListener('cut', preventCopyPaste, true);
-      document.removeEventListener('selectstart', preventTextSelect, true);
+      cancelled = true;
     };
-    // eslint-disable-next-line
-  }, [showInstructions, fullScreen]);
-  const fetchTest = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get(`/tests/${id}`);
-      const data = response.data;
-      if (data.success) {
-        setTest(data.test);
-        setTimeLeft(data.test.duration * 60); // Convert to seconds
-        // Initialize answers object
-        const initialAnswers = {};
-        data.test.questions.forEach((_, index) => {
-          initialAnswers[index] = { selectedAnswer: null };
-        });
-        setAnswers(initialAnswers);
-      } else {
-        toast.error(data.message || 'Failed to fetch test');
-        navigate('/tests');
-      }
-    } catch (error) {
-      console.error('Error fetching test:', error);
-      toast.error('Failed to fetch test');
-      navigate('/tests');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [id]);
 
-  // Security: Prevent right-click, copy, print, dev tools
-  // --- Security: Prevent context menu, shortcuts, copy/paste, selection ---
-  function preventContextMenu(e) {
-    e.preventDefault();
-    return false;
-  }
-  function preventShortcuts(e) {
-    // F12, Ctrl+Shift+I/J/C/U, Ctrl+U, Ctrl+P (print), Ctrl+C (copy), Ctrl+V (paste), Ctrl+X (cut)
-    if (
-      e.key === 'F12' ||
-      (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) ||
-      (e.ctrlKey && ['u', 'U', 'p', 'P', 'c', 'C', 'v', 'V', 'x', 'X'].includes(e.key))
-    ) {
-      e.preventDefault();
-      return false;
-    }
-  }
-  function preventCopyPaste(e) {
-    e.preventDefault();
-    return false;
-  }
-  function preventTextSelect(e) {
-    e.preventDefault();
-    return false;
-  }
-  // --- Tab switch/blur/fullscreenchange: warning counter and auto-submit ---
-  const isSubmittingRef = useRef(false);
-  useEffect(() => { isSubmittingRef.current = isSubmitting; }, [isSubmitting]);
-  const autoSubmit = (reason) => {
-    if (!isSubmittingRef.current) {
-      toast.error(reason);
-      handleSubmitTest();
-    }
-  };
-  // Show warning and auto-submit on 3rd violation
-  const handleViolation = (type) => {
-    setWarningCount(prev => {
-      const next = prev + 1;
-      if (next === 1) {
-        toast.error('Warning 1/3: Do not switch tabs!');
-      } else if (next === 2) {
-        toast.error('Warning 2/3: Last chance!');
-      } else if (next >= 3) {
-        toast.error('Warning 3/3: Exam will be auto-submitted!');
-        setTimeout(() => autoSubmit('Maximum tab switches/violations reached.'), 500);
-      }
-      return next;
-    });
-  };
-  function handleVisibilityChange() {
-    if (document.visibilityState === 'hidden') {
-      handleViolation('tab');
-    }
-  }
-  function handleWindowBlur() {
-    handleViolation('blur');
-  }
-  function handleFullScreenChange() {
-    const isFs = !!document.fullscreenElement;
-    setFullScreen(isFs);
-    if (!isFs && !showInstructions) {
-      setShowFullScreenMsg(true);
-    } else {
-      setShowFullScreenMsg(false);
-    }
-  }
-  // Enter full screen
-  const enterFullScreen = () => {
-    // Try ref first, fallback to document.documentElement
-    const elem = testContainerRef.current || document.documentElement;
-    if (elem && elem.requestFullscreen) {
-      elem.requestFullscreen().then(() => setFullScreen(true)).catch(() => setFullScreen(true));
-    } else {
-      setFullScreen(true); // fallback
-    }
-    setShowFullScreenMsg(false);
-  };
-  const handleAnswerSelect = (questionIndex, answerIndex) => {
-    setAnswers(prev => ({
-      ...prev,
-      [questionIndex]: { selectedAnswer: answerIndex }
-    }));
-  };
-
-  // Navigation (disabled if not fullscreen)
-  // Track visited questions for navigation coloring
-  const [visited, setVisited] = useState([]);
+  // Persist state
   useEffect(() => {
-    if (!showInstructions && fullScreen) {
-      setVisited(v => {
-        if (!v.includes(currentQuestion)) {
-          return [...v, currentQuestion];
-        }
-        return v;
-      });
-    }
-    // eslint-disable-next-line
-  }, [currentQuestion, showInstructions, fullScreen]);
+    const state = {
+      answers,
+      currentQuestionIndex,
+      visited: Array.from(visited),
+      markForReview,
+      timeLeft,
+      testStarted,
+    };
+    try {
+      localStorage.setItem(localStorageKey, JSON.stringify(state));
+    } catch {}
+  }, [
+    answers,
+    currentQuestionIndex,
+    visited,
+    markForReview,
+    timeLeft,
+    testStarted,
+    localStorageKey,
+  ]);
 
-  // Navigation logic with allowNavigation
-  const goToNext = () => {
-    if (!fullScreen) return;
-    if (test && test.allowNavigation === false) return;
-    setCurrentQuestion((prev) => Math.min(prev + 1, test.questions.length - 1));
+  // beforeunload
+  useEffect(() => {
+    const handler = (e) => {
+      if (!testStarted) return;
+      try {
+        localStorage.setItem(
+          localStorageKey,
+          JSON.stringify({
+            answers,
+            currentQuestionIndex,
+            visited: Array.from(visited),
+            markForReview,
+            timeLeft,
+            testStarted,
+          })
+        );
+      } catch {}
+      e.preventDefault();
+      e.returnValue =
+        "Your test is in progress. If you close this tab you may lose data.";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [
+    testStarted,
+    answers,
+    currentQuestionIndex,
+    visited,
+    markForReview,
+    timeLeft,
+    localStorageKey,
+  ]);
+
+  // Timer
+  useEffect(() => {
+    if (!testStarted || timeLeft === null) return;
+    if (timeLeft <= 0) {
+      if (isSubmittingRef.current) return;
+      (async () => {
+        isSubmittingRef.current = true;
+        try {
+          const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
+          const usedSeconds = Math.max(
+            0,
+            totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0)
+          );
+          const timeTaken = Math.ceil(usedSeconds / 60);
+          await api.post(`/tests/${id}/submit`, {
+            answers: answersRef.current,
+            timeTaken,
+          });
+          localStorage.removeItem(localStorageKey);
+          toast.success("Test auto-submitted (time up)");
+          navigate("/tests");
+        } catch {
+          toast.error("Auto submission failed");
+        }
+      })();
+      return;
+    }
+    const timerId = setInterval(
+      () =>
+        setTimeLeft((prev) =>
+          typeof prev === "number" ? Math.max(0, prev - 1) : prev
+        ),
+      1000
+    );
+    return () => clearInterval(timerId);
+  }, [testStarted, timeLeft, id, durationMinutes, navigate, localStorageKey]);
+
+  // Low time warning
+  useEffect(() => {
+    if (timeLeft !== null && timeLeft <= LOW_TIME_WARNING && testStarted) {
+      toast.error("⚠️ Only 2 minutes left! Please submit soon.");
+      warnedRef.current = true;
+    }
+  }, [timeLeft, testStarted]);
+
+  // Mark visited
+  useEffect(() => {
+    if (!test?.questions?.[currentQuestionIndex]) return;
+    const key = getQuestionKey(test.questions[currentQuestionIndex], currentQuestionIndex);
+    setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
+  }, [currentQuestionIndex, test]);
+
+  // Fullscreen & tab switch detection
+  useEffect(() => {
+    if (!testStarted) return;
+    const isDocFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+    const handleVisibility = () => {
+      if (document.hidden) setViolations(v => v + 1);
+    };
+    const handleFullscreen = () => {
+      setIsFullscreen(isDocFullscreen());
+      if (!isDocFullscreen()) setViolations(v => v + 1);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("fullscreenchange", handleFullscreen);
+    document.addEventListener("webkitfullscreenchange", handleFullscreen);
+    document.addEventListener("mozfullscreenchange", handleFullscreen);
+    document.addEventListener("MSFullscreenChange", handleFullscreen);
+    setIsFullscreen(isDocFullscreen());
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("fullscreenchange", handleFullscreen);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreen);
+      document.removeEventListener("mozfullscreenchange", handleFullscreen);
+      document.removeEventListener("MSFullscreenChange", handleFullscreen);
+    };
+  }, [testStarted]);
+
+  // Auto-submit on violation
+  useEffect(() => {
+    if (violations > VIOLATION_LIMIT && testStarted && !isSubmittingRef.current) {
+      isSubmittingRef.current = true;
+      (async () => {
+        try {
+          const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
+          const usedSeconds = Math.max(0, totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0));
+          const timeTaken = Math.ceil(usedSeconds / 60);
+          await api.post(`/tests/${id}/submit`, { answers: answersRef.current, timeTaken, forced: true, autoSubmitReason: "violation" });
+          localStorage.removeItem(localStorageKey);
+          toast.error("Test auto-submitted due to rule violation");
+          navigate("/tests");
+        } catch {
+          toast.error("Auto submission failed");
+        }
+      })();
+    }
+  }, [violations, testStarted, id, durationMinutes, timeLeft, navigate, localStorageKey]);
+
+  // Guards
+  useEffect(() => {
+    if (alreadyAttempted && !attemptCheckLoading) {
+      toast.error("You have already attempted this test.");
+      navigate("/tests");
+    }
+  }, [alreadyAttempted, attemptCheckLoading, navigate]);
+
+  // Handlers
+  const handleStartTest = async () => {
+    if (!durationMinutes) {
+      toast.error("Test duration not available.");
+      return;
+    }
+    if (!agreeInstructions) {
+      toast.error("Please agree to the instructions.");
+      return;
+    }
+    try {
+      if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
+    } catch {}
+    setAnswers({});
+    setVisited(new Set());
+    setMarkForReview({});
+    setCurrentQuestionIndex(0);
+    setTimeLeft(durationMinutes * 60);
+    setTestStarted(true);
+    setResumeAvailable(false);
+    warnedRef.current = false;
   };
-  const goToPrev = () => {
-    if (!fullScreen) return;
-    if (test && test.allowNavigation === false) return;
-    setCurrentQuestion((prev) => Math.max(prev - 1, 0));
+  const handleResumeTest = async () => {
+    try {
+      if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
+    } catch {}
+    if (timeLeft === null && durationMinutes) setTimeLeft(durationMinutes * 60);
+    setTestStarted(true);
+    setResumeAvailable(false);
+    warnedRef.current = false;
   };
-  const goToQuestion = (idx) => {
-    if (!fullScreen) return;
-    if (test && test.allowNavigation === false) return;
-    setCurrentQuestion(idx);
+  const handleAnswer = (questionIndex, option) => {
+    if (!test?.questions?.[questionIndex]) return;
+    const q = test.questions[questionIndex];
+    const key = getQuestionKey(q, questionIndex);
+    setAnswers(prev => {
+      if (isSingleType(q)) return { ...prev, [key]: [option] };
+      const prevForQ = Array.isArray(prev[key]) ? prev[key] : [];
+      const exists = prevForQ.includes(option);
+      const updated = exists ? prevForQ.filter(o => o !== option) : [...prevForQ, option];
+      return { ...prev, [key]: updated };
+    });
+    setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
+  };
+  const handleMarkForReview = () => {
+    if (!test?.questions?.[currentQuestionIndex]) return;
+    const q = test.questions[currentQuestionIndex];
+    const key = getQuestionKey(q, currentQuestionIndex);
+    setMarkForReview(prev => ({ ...prev, [key]: !prev[key] }));
+    if (currentQuestionIndex < (test.questions?.length || 0) - 1) setCurrentQuestionIndex(i => i + 1);
+  };
+  const handleClearResponse = () => {
+    if (!test?.questions?.[currentQuestionIndex]) return;
+    const q = test.questions[currentQuestionIndex];
+    const key = getQuestionKey(q, currentQuestionIndex);
+    setAnswers(prev => { const copy = { ...prev }; delete copy[key]; return copy; });
+    setMarkForReview(prev => ({ ...prev, [key]: false }));
+  };
+  const handleGoToQuestion = (index) => {
+    if (index < 0 || index >= (test.questions?.length || 0)) return;
+    setCurrentQuestionIndex(index);
   };
   const handleSubmitTest = async () => {
     if (isSubmittingRef.current) return;
-    // Validate answers structure
-    const answersArray = Object.values(answers).map((a, idx) => ({
-      selectedAnswer: typeof a.selectedAnswer === 'number' ? a.selectedAnswer : null
-    }));
-    // If requireAllQuestions, check all answered
-    if (test && test.requireAllQuestions) {
-      const unanswered = answersArray.find(a => a.selectedAnswer === null);
-      if (unanswered) {
-        toast.error('You must attempt all questions before submitting.');
-        return;
-      }
+    // Pre-submit: check all questions answered
+    const unanswered = test.questions.filter((q, idx) => {
+      const key = getQuestionKey(q, idx);
+      return !Array.isArray(answers[key]) || answers[key].length === 0;
+    });
+    if (unanswered.length > 0) {
+      toast.error(`Please answer all questions before submitting. (${unanswered.length} unanswered)`);
+      return;
     }
+    const ok = window.confirm("Are you sure you want to submit the test?");
+    if (!ok) return;
     isSubmittingRef.current = true;
-    setIsSubmitting(true);
     try {
-      const timeTaken = (test.duration * 60) - timeLeft; // Time taken in seconds
-      const response = await api.post(`/tests/${id}/submit`, {
-        answers: answersArray,
-        timeTaken: Math.floor(timeTaken / 60) // Convert to minutes
-      });
-      const data = response.data;
-      if (data.success) {
-        toast.success('Test submitted successfully!');
-        // Exit full screen if possible and only if in fullscreen
-        if (document.fullscreenElement && document.exitFullscreen) {
-          document.exitFullscreen();
-        }
-        navigate('/tests');
-      } else {
-        toast.error((data.message ? data.message : 'Failed to submit test') + (data.error ? `: ${data.error}` : ''));
-        // Reset isSubmittingRef so auto-submit can trigger again
-        isSubmittingRef.current = false;
-        setIsSubmitting(false);
-      }
-    } catch (error) {
-      console.error('Error submitting test:', error);
-      let msg = 'Failed to submit test';
-      if (error.response && error.response.data && error.response.data.message) {
-        msg = error.response.data.message;
-        if (error.response.data.error) {
-          msg += `: ${error.response.data.error}`;
-        }
-      }
-      toast.error(msg);
-      // Reset isSubmittingRef so auto-submit can trigger again
+      const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
+      const usedSeconds = Math.max(0, totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0));
+      const timeTaken = Math.ceil(usedSeconds / 60);
+      await api.post(`/tests/${id}/submit`, { answers: answersRef.current, timeTaken });
+      localStorage.removeItem(localStorageKey);
+      toast.success("Test submitted successfully");
+      navigate("/tests");
+    } catch {
+      toast.error("Submission failed");
       isSubmittingRef.current = false;
-      setIsSubmitting(false);
-    } finally {
-      // Only set submitting false here if not already reset above
-      if (isSubmittingRef.current) {
-        setIsSubmitting(false);
-        isSubmittingRef.current = false;
-      }
     }
   };
 
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  // UI helpers
+  const getPaletteClass = (q, idx) => {
+    const key = getQuestionKey(q, idx);
+    if (currentQuestionIndex === idx) return "bg-blue-600 text-white ring-2 ring-blue-400";
+    if (markForReview[key]) return "bg-purple-500 text-white";
+    if (Array.isArray(answers[key]) && answers[key].length > 0) return "bg-green-500 text-white";
+    if (visited.has(key)) return "bg-red-500 text-white";
+    return "bg-gray-300 text-gray-700";
   };
 
 
-  if (isMobile) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
-        <AlertCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Test Not Available on Mobile</h2>
-        <p className="text-gray-700 text-center mb-4 max-w-md">For security and best experience, tests can only be taken from a desktop or laptop device. Please access this page from a supported device.</p>
-        <Button onClick={() => navigate('/tests')} variant="outline">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Tests
-        </Button>
-      </div>
-    );
+  // UI helpers
+  const answeredCount = Object.values(answers).filter(a => Array.isArray(a) && a.length > 0).length;
+  const resumeSummary = resumeAvailable ? (
+    <div className="mb-4 text-sm text-gray-700">
+      <div>Saved progress found for this test.</div>
+      <div>Answered: <strong>{answeredCount}</strong> / {test?.questions?.length || 0}</div>
+      <div>Time left (if resumed): <strong>{formatTime(timeLeft)}</strong></div>
+    </div>
+  ) : null;
+
+  if (loading) return <div className="flex justify-center items-center h-screen"><p>Loading...</p></div>;
+  if (error) return <div className="flex flex-col items-center justify-center h-screen"><div className="bg-white rounded-lg shadow-lg p-8 border border-gray-200 max-w-lg w-full text-center"><h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1><p className="text-gray-700 mb-6">{error}</p><Button onClick={() => navigate("/tests")} variant="primary">Back to Tests</Button></div></div>;
+  if (!test) return <div className="flex justify-center items-center h-screen"><p>Test not found</p></div>;
+
+  const currentQ = test.questions?.[currentQuestionIndex] || null;
+  const currentKey = currentQ ? getQuestionKey(currentQ, currentQuestionIndex) : null;
+
+  if (attemptCheckLoading) {
+    return <div className="flex justify-center items-center h-screen"><p>Loading...</p></div>;
   }
-
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   if (alreadyAttempted) {
     return (
-      <div className="text-center py-12">
-        <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-        <h3 className="mt-2 text-lg font-bold text-gray-900">You have already completed this test.</h3>
-        <Button onClick={() => navigate('/results')} className="mt-4">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Go to Results
-        </Button>
-      </div>
-    );
-  }
-
-  if (!test) {
-    return (
-      <div className="text-center py-12">
-        <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
-        <h3 className="mt-2 text-sm font-medium text-gray-900">Test not found</h3>
-        <Button onClick={() => navigate('/tests')} className="mt-4">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Tests
-        </Button>
-      </div>
-    );
-  }
-
-  // Show instructions and agreement before starting
-  if (showInstructions) {
-    return (
-      <div className="max-w-2xl mx-auto card mt-10 bg-white">
-        <h1 className="text-2xl font-bold mb-4">Test Instructions</h1>
-        <ul className="list-disc pl-6 text-gray-700 mb-4 space-y-2">
-          <li>Do not switch tabs or leave full screen. Doing so will auto-submit your test.</li>
-          <li>Do not use right-click, copy, print, or developer tools during the test.</li>
-          <li>Read each question carefully and answer to the best of your ability.</li>
-          <li>Once you start, the timer will begin and cannot be paused.</li>
-          <li>Click "Start Test" to enter full screen and begin.</li>
-        </ul>
-        <div className="flex items-center mb-4">
-          <input
-            type="checkbox"
-            id="agree"
-            checked={agreed}
-            onChange={e => setAgreed(e.target.checked)}
-            className="mr-2"
-          />
-          <label htmlFor="agree" className="text-gray-800">I have read and agree to the instructions above.</label>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+        <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-8 border border-gray-200 text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">You have already attempted this test.</h1>
+          <p className="text-gray-700 mb-6">You cannot retake this test. If you believe this is a mistake, please contact your instructor or admin.</p>
+          <Button onClick={() => navigate("/tests")} variant="primary">Back to Tests</Button>
         </div>
-        <Button
-          onClick={() => {
-            setShowInstructions(false);
-            setTimeout(() => enterFullScreen(), 100); // Enter full screen after render
-          }}
-          disabled={!agreed}
-          size="lg"
-          className="w-full"
-        >
-          <Maximize2 className="w-5 h-5 mr-2" />
-          Start Test
-        </Button>
       </div>
     );
   }
-
-  // Main test UI
+  if (!testStarted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+        <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-8 border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-base font-semibold text-gray-500 uppercase tracking-wide">Test</span>
+            <span className="text-sm text-gray-400">Duration: <span className="font-semibold text-gray-700">{durationMinutes} min</span></span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-left">{test.title}</h1>
+          <div className="mb-6"><div className="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4 text-gray-900"><h2 className="font-semibold text-xl text-yellow-800 mb-2 flex items-center gap-2"><svg className="w-6 h-6 text-yellow-500 inline-block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" /></svg>Test Instructions</h2><div className="whitespace-pre-line text-base">{test.instructions && test.instructions.trim().length > 0 ? test.instructions : "Please read all questions carefully. Do not refresh or close the browser during the test. Your answers will be auto-submitted when time is up."}</div></div></div>
+          {resumeSummary}
+          {!resumeAvailable ? (
+            <>
+              <div className="flex items-center gap-2 mb-6"><input type="checkbox" id="agreeInstructions" checked={!!agreeInstructions} onChange={e => setAgreeInstructions(e.target.checked)} className="mr-2" /><label htmlFor="agreeInstructions" className="text-gray-800 select-none cursor-pointer">I have read and agree to the instructions above.</label></div>
+              <Button onClick={handleStartTest} disabled={!agreeInstructions || !durationMinutes} size="lg" className="w-full">Start Test</Button>
+            </>
+          ) : (
+            <div className="flex flex-col gap-3"><Button onClick={handleResumeTest} size="lg" className="w-full">Resume Test</Button><Button onClick={() => { localStorage.removeItem(localStorageKey); setResumeAvailable(false); setAnswers({}); setVisited(new Set()); setMarkForReview({}); setAgreeInstructions(false); if (durationMinutes) setTimeLeft(durationMinutes * 60); }} variant="secondary" size="lg" className="w-full">Start Fresh (clear saved)</Button></div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // Test in progress
   return (
-    <div
-      className="max-w-4xl mx-auto bg-white min-h-screen select-none"
-      ref={testContainerRef}
-      style={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        MozUserSelect: 'none',
-        msUserSelect: 'none',
-      }}
-      onContextMenu={preventContextMenu}
-      onCopy={preventCopyPaste}
-      onPaste={preventCopyPaste}
-      onCut={preventCopyPaste}
-      onSelectStart={preventTextSelect}
-    >
-      {/* Blurred/frozen content when not fullscreen */}
-      <div style={{ pointerEvents: showFullScreenMsg ? 'none' : 'auto', filter: showFullScreenMsg ? 'blur(2px)' : 'none' }}>
-      {/* Header */}
-      <div className="mb-6">
-        <Button 
-          onClick={() => {
-            if (window.confirm('Are you sure you want to leave? Your test will be submitted.')) {
-              handleSubmitTest();
-            }
-          }} 
-          variant="outline" 
-          size="sm"
-          className="mb-4"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Exit & Submit
-        </Button>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{test.title}</h1>
-            <p className="text-gray-600 mt-2">{test.description}</p>
+    <div className="max-w-5xl mx-auto p-4" aria-label="Test Taking Page">
+      <div className="grid grid-cols-5 gap-6">
+        <div className="col-span-3 space-y-4">
+          <div className="flex items-center justify-between mb-4"><span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">{test.title}</span><span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">{formatTime(timeLeft)}</span></div>
+          <div className="mb-2 text-gray-600 text-sm">Question {currentQuestionIndex + 1} of {test.questions.length}</div>
+          <div className="text-lg font-medium mb-2">{currentQ ? (currentQ.question || currentQ.text || currentQ.questionText) : "Question not available"}</div>
+          <div className="space-y-2">
+            {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
+              const key = getQuestionKey(currentQ, currentQuestionIndex);
+              const isSingle = isSingleType(currentQ);
+              if (process.env.NODE_ENV !== 'production') {
+                // Debug: log type detection
+                // eslint-disable-next-line no-console
+                console.log(`Q${currentQuestionIndex + 1} type:`, currentQ.type, 'isSingle:', isSingle, 'options:', currentQ.options);
+              }
+              const selected = Array.isArray(answers[key]) && answers[key].includes(opt);
+              return (
+                <label key={i} className="block cursor-pointer">
+                  <input
+                    type={isSingle ? "radio" : "checkbox"}
+                    name={key}
+                    checked={!!selected}
+                    onChange={() => handleAnswer(currentQuestionIndex, opt)}
+                    className="mr-2"
+                  />
+                  {opt}
+                </label>
+              );
+            })}
           </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500">Time Remaining</div>
-            <div className={`text-2xl font-bold ${
-              timeLeft < 300 ? 'text-red-600' : 'text-gray-900'
-            }`}>
-              {formatTime(timeLeft)}
-            </div>
-          </div>
+          <div className="flex gap-2 mt-6 flex-wrap"><Button onClick={handleMarkForReview} variant={markForReview[currentKey] ? "primary" : "secondary"}>{markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}</Button><Button onClick={handleClearResponse} variant="secondary" aria-label="Clear Response">Clear Response</Button><Button disabled={currentQuestionIndex === 0} onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))} variant="secondary" aria-label="Previous Question">Previous</Button>{currentQuestionIndex < test.questions.length - 1 ? (<Button onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))} variant="secondary" aria-label="Next Question">Next</Button>) : (<Button onClick={handleSubmitTest} variant="primary" aria-label="Submit Test">Submit</Button>)}</div>
         </div>
+        <div className="col-span-2 flex flex-col items-center"><div className="mb-4 w-full max-w-xs"><div className="flex flex-wrap gap-2 justify-center text-sm"><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-green-500"></span>Answered</span><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-purple-500"></span>Marked</span><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-gray-300 border"></span>Not Visited</span><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>Visited (no answer)</span></div></div><div className="bg-white border rounded-lg p-4 shadow w-full max-w-xs"><div className="grid grid-cols-5 gap-2">{test.questions.map((q, index) => { const cls = getPaletteClass(q, index); const label = getQuestionKey(q, index); return (<button key={label} className={`w-8 h-8 rounded-full font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors duration-200 ${cls}`} aria-label={`Go to question ${index + 1}`} onClick={() => handleGoToQuestion(index)}>{index + 1}</button>); })}</div></div></div></div>
       </div>
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-          <span>Progress</span>
-          <span>{Object.values(answers).filter(a => a.selectedAnswer !== null).length} / {test.questions.length} answered</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div 
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-            style={{ 
-              width: `${(Object.values(answers).filter(a => a.selectedAnswer !== null).length / test.questions.length) * 100}%` 
-            }}
-          ></div>
-        </div>
-      </div>
-
-      {/* Question Navigation */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        {test.questions.map((_, idx) => {
-          let navColor = '';
-          if (answers[idx]?.selectedAnswer !== null) {
-            navColor = 'bg-green-500 text-white border-green-600'; // Attempted: green
-          } else if (visited.includes(idx)) {
-            navColor = 'bg-red-500 text-white border-red-600'; // Visited but not attempted: red
-          } else {
-            navColor = 'bg-gray-800 text-white border-gray-900'; // Not visited: dark gray
-          }
-          if (currentQuestion === idx) {
-            navColor = 'bg-blue-600 text-white border-blue-600'; // Current: blue
-          }
-          return (
-            <button
-              key={idx}
-              onClick={() => goToQuestion(idx)}
-              className={`w-8 h-8 rounded-full border text-sm font-bold focus:outline-none transition-colors duration-200 ${navColor} ${!fullScreen || showFullScreenMsg || (test.allowNavigation === false && idx !== currentQuestion) ? 'opacity-50 cursor-not-allowed' : ''}`}
-              aria-label={`Go to question ${idx + 1}`}
-              disabled={!fullScreen || showFullScreenMsg || (test.allowNavigation === false && idx !== currentQuestion)}
-              tabIndex={!fullScreen || showFullScreenMsg ? -1 : 0}
-            >
-              {idx + 1}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Single Question View */}
-      <div className="card mb-6" style={{ pointerEvents: showFullScreenMsg ? 'none' : 'auto', opacity: showFullScreenMsg ? 0.5 : 1 }}>
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-500">
-              Question {currentQuestion + 1} of {test.questions.length}
-            </span>
-            <span className="text-sm text-gray-500">
-              {test.questions[currentQuestion].points} point{test.questions[currentQuestion].points !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <h3 className="text-lg font-medium text-gray-900">
-            {test.questions[currentQuestion].question}
-          </h3>
-        </div>
-        <div className="space-y-3">
-          {test.questions[currentQuestion].options.map((option, optionIndex) => (
-            <label
-              key={optionIndex}
-              className={`flex items-center p-3 border rounded-md cursor-pointer transition-colors duration-200 ${
-                answers[currentQuestion]?.selectedAnswer === optionIndex
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-              style={{ pointerEvents: showFullScreenMsg ? 'none' : 'auto', opacity: showFullScreenMsg ? 0.5 : 1 }}
-            >
-              <input
-                type="radio"
-                name={`question-${currentQuestion}`}
-                value={optionIndex}
-                checked={answers[currentQuestion]?.selectedAnswer === optionIndex}
-                onChange={() => handleAnswerSelect(currentQuestion, optionIndex)}
-                className="sr-only"
-                disabled={showFullScreenMsg}
-              />
-              <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
-                answers[currentQuestion]?.selectedAnswer === optionIndex
-                  ? 'border-blue-500 bg-blue-500'
-                  : 'border-gray-300'
-              }`}>
-                {answers[currentQuestion]?.selectedAnswer === optionIndex && (
-                  <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
-                )}
-              </div>
-              <span className="text-gray-900">{option}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Navigation Buttons */}
-      <div className="flex justify-between mb-8">
-        <Button onClick={goToPrev} disabled={currentQuestion === 0 || !fullScreen || showFullScreenMsg || (test.allowNavigation === false)} variant="secondary">
-          Previous
-        </Button>
-        <Button onClick={goToNext} disabled={currentQuestion === test.questions.length - 1 || !fullScreen || showFullScreenMsg || (test.allowNavigation === false)} variant="secondary">
-          Next
-        </Button>
-      </div>
-
-      {/* Submit Button */}
-      <div className="mt-8 text-center">
-        <Button
-          onClick={handleSubmitTest}
-          loading={isSubmitting}
-          disabled={isSubmitting || !fullScreen || showFullScreenMsg}
-          size="lg"
-          className="px-8"
-        >
-          <CheckCircle className="w-5 h-5 mr-2" />
-          Submit Test
-        </Button>
-        <p className="text-sm text-gray-500 mt-2">
-          {test.requireAllQuestions ? 'You must attempt all questions before submitting.' : 'You can submit without answering all questions.'}
-        </p>
-      </div>
-
-      </div>
-      {/* Fullscreen required message overlay */}
-      {showFullScreenMsg && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50" style={{ pointerEvents: 'auto' }}>
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto text-center">
-            <h2 className="text-xl font-bold text-red-600 mb-4">Please switch to full screen to continue your exam.</h2>
-            <p className="mb-4 text-gray-700">You must remain in full screen mode for the duration of the test. Navigation and answering are disabled until you return to full screen.</p>
-            <Button onClick={enterFullScreen} size="lg" className="w-full">Re-enter Full Screen</Button>
-          </div>
-        </div>
-      )}
-    </div>
+   
   );
 };
 

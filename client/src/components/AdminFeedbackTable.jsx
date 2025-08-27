@@ -13,7 +13,7 @@ const AdminFeedbackTable = () => {
   const fetchFeedbacks = async () => {
     setLoading(true); setError('');
     try {
-      const res = await api.get('/tests/feedback');
+      const res = await api.get('/feedback');
       if (res.data.success) {
         setFeedbacks(res.data.feedbacks);
       } else {
@@ -26,9 +26,36 @@ const AdminFeedbackTable = () => {
     }
   };
 
+  const exportCsv = () => {
+    if (!feedbacks || feedbacks.length === 0) return;
+    const headers = ['Name', 'Email', 'Message', 'Date'];
+    const rows = feedbacks.map(fb => [
+      fb.name || '',
+      fb.email || '',
+      (fb.message || '').replace(/\r?\n/g, ' '),
+      fb.createdAt ? new Date(fb.createdAt).toLocaleString() : ''
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'feedback.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4">Student Feedback</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold">Student Feedback</h2>
+        <div className="flex items-center gap-2">
+          <button onClick={fetchFeedbacks} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded">Refresh</button>
+          <button onClick={exportCsv} className="px-3 py-1.5 text-sm bg-gray-100 border rounded" disabled={feedbacks.length === 0}>Export CSV</button>
+        </div>
+      </div>
       {loading ? (
         <div>Loading feedback...</div>
       ) : error ? (

@@ -9,6 +9,7 @@ import AdminExamResults from './AdminExamResults';
 import UserManagement from './UserManagement';
 import TestAnalytics from './TestAnalytics';
 import SuperAdminPanel from './SuperAdminPanel';
+import AdminFeedbackTable from '../components/AdminFeedbackTable';
 const ManageTestsTable = lazy(() => import('../components/ManageTestsTable'));
 
 
@@ -19,6 +20,7 @@ const sidebarItems = [
   { key: 'userMgmt', label: 'User Management' },
   { key: 'results', label: 'Exam Results' },
   { key: 'analytics', label: 'Test Analytics' },
+  { key: 'feedback', label: 'Feedback' },
   { key: 'auditLogs', label: 'Audit Logs' },
 ];
 
@@ -103,7 +105,6 @@ const AdminPanel = () => {
     setSelectedUserIds([]);
     window.location.reload();
   };
-
   // Fetch users and tests on initial load and when needed
   useEffect(() => {
     setLoading(true);
@@ -367,6 +368,12 @@ const AdminPanel = () => {
         {section === 'analytics' && (
           <div>
             <TestAnalytics />
+          </div>
+        )}
+        {section === 'feedback' && (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Student Feedback</h2>
+            <AdminFeedbackTable />
           </div>
         )}
         {section === 'superadmin' && user?.role === 'superadmin' && (

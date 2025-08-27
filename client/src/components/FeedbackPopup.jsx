@@ -16,7 +16,7 @@ const FeedbackPopup = ({ user, onClose }) => {
     }
     setLoading(true);
     try {
-      const res = await api.post('/tests/feedback', { message });
+      const res = await api.post('/feedback', { message });
       if (res.data.success) {
         setSuccess('Thank you for your feedback!');
         setMessage('');

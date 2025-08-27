@@ -46,6 +46,8 @@ app.use('/api/tests', testRoutes);
 app.use('/api/tests', require('./routes/leaderboard'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
+app.use('/api/meta', require('./routes/meta'));
+app.use('/api/feedback', require('./routes/feedback'));
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -73,7 +75,9 @@ app.use('*', (req, res) => {
 
 // Create default admin if none exists
 const User = require('./models/User');
+const Test = require('./models/Test');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 async function createDefaultAdmin() {
   try {
@@ -104,8 +108,29 @@ async function createDefaultAdmin() {
   }
 }
 
+
+// Backfill testCode for existing tests (bulk update to avoid validation error)
+async function backfillTestCodes() {
+  try {
+    const tests = await Test.find({ $or: [ { testCode: { $exists: false } }, { testCode: null }, { testCode: '' } ] });
+    let count = 0;
+    for (const test of tests) {
+      const code = crypto.randomBytes(4).toString('hex');
+      await Test.updateOne({ _id: test._id }, { $set: { testCode: code } });
+      count++;
+      console.log(`Backfilled testCode for test: ${test.title} (${test._id})`);
+    }
+    if (count > 0) {
+      console.log(`✅ Backfilled testCode for ${count} test(s)`);
+    }
+  } catch (err) {
+    console.error('❌ Error backfilling test codes:', err.message);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`🚀 Max Solutions Server running on port ${PORT}`);
   console.log(`📱 Client URL: ${process.env.CLIENT_URL || 'http://localhost:3000'}`);
   await createDefaultAdmin();
+  await backfillTestCodes();
 });

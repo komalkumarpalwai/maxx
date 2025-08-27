@@ -1,6 +1,14 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 const testSchema = new mongoose.Schema({
+  testCode: {
+    type: String,
+    unique: true,
+    required: true,
+    immutable: true,
+    default: () => crypto.randomBytes(4).toString('hex') // 8-char hex code
+  },
   title: {
     type: String,
     required: [true, 'Test title is required'],
@@ -18,7 +26,7 @@ const testSchema = new mongoose.Schema({
     maxlength: [500, 'Description cannot exceed 500 characters']
   },
   duration: {
-    type: Number, // in minutes
+    type: Number, // minutes
     min: [5, 'Duration must be at least 5 minutes'],
     max: [180, 'Duration cannot exceed 3 hours']
   },
@@ -34,22 +42,26 @@ const testSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  startDate: {
-    type: Date
-  },
-  endDate: {
-    type: Date
-  },
+  startDate: Date,
+  endDate: Date,
+
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
+
   questions: [{
     question: {
       type: String,
       required: true,
       trim: true
+    },
+    type: {
+      type: String,
+      enum: ['single', 'multi'],
+      default: 'single',
+      description: 'single = only one answer allowed, multi = multiple answers allowed'
     },
     options: [{
       type: String,
@@ -64,6 +76,7 @@ const testSchema = new mongoose.Schema({
       default: 1
     }
   }],
+
   requireAllQuestions: {
     type: Boolean,
     default: true,
@@ -73,30 +86,52 @@ const testSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     description: 'If false, student cannot navigate between questions.'
+  },
+  tabSwitchLimit: {
+    type: Number,
+    default: 3,
+    min: 1,
+    description: 'Allowed tab switches before auto-submit.'
+  },
+  deviceRestriction: {
+    type: String,
+    enum: ['mobile', 'desktop', 'both'],
+    default: 'both',
+    description: 'Device restriction for test.'
+  },
+  allowedBranches: {
+    type: [String],
+    default: [],
+    description: 'Branches allowed to take this test.'
+  },
+  allowedYears: {
+    type: [String],
+    default: [],
+    description: 'Years allowed to take this test.'
   }
-}, {
-  timestamps: true
-});
+}, { timestamps: true });
 
-// Validate that end date is after start date, if both are set
-testSchema.pre('save', function(next) {
+// ✅ Validate dates
+testSchema.pre('save', function (next) {
   if (this.startDate && this.endDate && this.endDate <= this.startDate) {
-    next(new Error('End date must be after start date'));
+    return next(new Error('End date must be after start date'));
+  }
+  if (!this.testCode) {
+    this.testCode = crypto.randomBytes(4).toString('hex');
   }
   next();
 });
 
-
-// Method to check if test is currently active (automatic by time, unless manually deactivated)
-testSchema.methods.isCurrentlyActive = function() {
+// ✅ Check if test is currently active
+testSchema.methods.isCurrentlyActive = function () {
   const now = new Date();
   if (this.isActive === false) return false; // manual override
   if (!this.startDate || !this.endDate) return false;
   return now >= this.startDate && now <= this.endDate;
 };
 
-// Method to get test status (automatic by time, unless manually deactivated)
-testSchema.methods.getStatus = function() {
+// ✅ Get test status
+testSchema.methods.getStatus = function () {
   const now = new Date();
   if (this.isActive === false) return 'inactive';
   if (!this.startDate || !this.endDate) return 'draft';
@@ -106,4 +141,5 @@ testSchema.methods.getStatus = function() {
 };
 
 module.exports = mongoose.model('Test', testSchema);
+
 

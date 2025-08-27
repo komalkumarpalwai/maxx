@@ -4,8 +4,65 @@ const { auth, isAdmin } = require('../middlewares/auth');
 const Test = require('../models/Test');
 const TestResult = require('../models/TestResult');
 
+// @desc    Update a single question in a test (admin only)
+// @route   PUT /api/tests/:id/questions/update
+// @access  Private (Admin)
+router.put('/:id/questions/update', auth, isAdmin, async (req, res) => {
+  try {
+  const { index, question, option1, option2, option3, option4, correctAnswer, points, type } = req.body;
+    if (index === undefined || index === null || isNaN(Number(index))) {
+      return res.status(400).json({ success: false, message: 'Question index is required' });
+    }
+    if (!question || !option1 || !option2 || !option3 || !option4) {
+      return res.status(400).json({ success: false, message: 'All options and question text are required' });
+    }
+    if (correctAnswer === undefined || correctAnswer === null || correctAnswer === '' || isNaN(Number(correctAnswer))) {
+      return res.status(400).json({ success: false, message: 'Correct answer is required' });
+    }
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ success: false, message: 'Test not found' });
+    }
+    if (!test.questions || !Array.isArray(test.questions) || test.questions.length <= Number(index)) {
+      return res.status(400).json({ success: false, message: 'Invalid question index' });
+    }
+    // Update the question at the given index
+    test.questions[index] = {
+      question,
+      type: type || 'single',
+      options: [option1, option2, option3, option4],
+      correctAnswer: Number(correctAnswer) - 1, // frontend uses 1-4, backend uses 0-3
+      points: points ? Number(points) : 1
+    };
+    await test.save();
+    res.json({ success: true, message: 'Question updated', question: test.questions[index] });
+  } catch (error) {
+    console.error('Update question error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update question', error: error.message });
+  }
+});
 const { getTestAnalytics } = require('../controllers/analyticsController');
 const { upload, uploadQuestionsCSV } = require('../controllers/csvController');
+
+// @desc    Get all questions for a test (admin only)
+// @route   GET /api/tests/:id/admin-questions
+// @access  Private (Admin)
+router.get('/:id/admin-questions', auth, isAdmin, async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ success: false, message: 'Test not found' });
+    }
+    res.json({
+      success: true,
+      questions: test.questions || [],
+      testTitle: test.title
+    });
+  } catch (error) {
+    console.error('Get admin questions error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch questions', error: error.message });
+  }
+});
 // @desc    Upload questions via CSV (admin only)
 // @route   POST /api/tests/upload-csv
 // @access  Private (Admin)
@@ -29,13 +86,13 @@ router.get('/', async (req, res) => {
     let tests;
     if (req.query.all === '1') {
       tests = await Test.find({})
-        .select('-questions')
+        .select('-questions') // exclude questions, include all other fields (including testCode)
         .populate('createdBy', 'name')
         .sort({ startDate: 1 });
     } else {
       // Show all tests that are isActive: true (regardless of date)
       tests = await Test.find({ isActive: true })
-        .select('-questions')
+        .select('-questions') // exclude questions, include all other fields (including testCode)
         .populate('createdBy', 'name')
         .sort({ startDate: 1 });
       // Debug log
@@ -123,11 +180,32 @@ router.post('/', auth, isAdmin, async (req, res) => {
       const realAdmin = await require('../models/User').findOne({ role: 'admin', email: 'komalp@gmail.com' });
       if (realAdmin) createdBy = realAdmin._id;
     }
-    const { title, category, description, requireAllQuestions, allowNavigation } = req.body;
+    const {
+      title,
+      category,
+      description,
+      requireAllQuestions,
+      allowNavigation,
+      tabSwitchLimit,
+      deviceRestriction,
+      allowedBranches,
+      allowedYears
+    } = req.body;
     if (!title || !category) {
       return res.status(400).json({ success: false, message: 'Title and category are required' });
     }
-    const test = new Test({ title, category, description, createdBy, requireAllQuestions, allowNavigation });
+    const test = new Test({
+      title,
+      category,
+      description,
+      createdBy,
+      requireAllQuestions,
+      allowNavigation,
+      tabSwitchLimit,
+      deviceRestriction,
+      allowedBranches,
+      allowedYears
+    });
     await test.save();
     res.status(201).json({
       success: true,
@@ -153,17 +231,36 @@ router.put('/:id/questions', auth, isAdmin, async (req, res) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return res.status(400).json({ success: false, message: 'Questions are required' });
     }
-    const totalQuestions = questions.length;
-    const duration = 30; // default duration
-    const passingScore = 40; // default passing score
-    const test = await Test.findByIdAndUpdate(
-      req.params.id,
-      { questions, totalQuestions, duration, passingScore },
-      { new: true, runValidators: true }
-    );
+    // Validate each question
+    for (const [i, q] of questions.entries()) {
+      if (!q.question || !q.option1 || !q.option2 || !q.option3 || !q.option4) {
+        return res.status(400).json({ success: false, message: `All options are required for question ${i + 1}` });
+      }
+      if (q.correctAnswer === undefined || q.correctAnswer === null || q.correctAnswer === '' || isNaN(Number(q.correctAnswer))) {
+        return res.status(400).json({ success: false, message: `Correct answer is required for question ${i + 1}` });
+      }
+    }
+    // Convert options to array and correctAnswer to number
+    const formattedQuestions = questions.map(q => ({
+      question: q.question,
+      type: q.type || 'single',
+      options: [q.option1, q.option2, q.option3, q.option4],
+      correctAnswer: Number(q.correctAnswer) - 1, // frontend uses 1-4, backend uses 0-3
+      points: q.points ? Number(q.points) : 1
+    }));
+    const test = await Test.findById(req.params.id);
     if (!test) {
       return res.status(404).json({ success: false, message: 'Test not found' });
     }
+    // Append new questions
+    test.questions = [...test.questions, ...formattedQuestions];
+    test.totalQuestions = test.questions.length;
+    // Ensure testCode exists for legacy tests
+    if (!test.testCode) {
+      const crypto = require('crypto');
+      test.testCode = crypto.randomBytes(4).toString('hex');
+    }
+    await test.save();
     res.json({ success: true, message: 'Questions added', test });
   } catch (error) {
     console.error('Add questions error:', error);
@@ -176,13 +273,18 @@ router.put('/:id/questions', auth, isAdmin, async (req, res) => {
 // @access  Private (Admin)
 router.put('/:id/activate', auth, isAdmin, async (req, res) => {
   try {
-    const { startDate, endDate } = req.body;
+    const { startDate, endDate, duration } = req.body;
     if (!startDate || !endDate) {
       return res.status(400).json({ success: false, message: 'Start and end date required' });
     }
+    // Only add duration if it's a valid number
+    const updateFields = { isActive: true, startDate, endDate };
+    if (typeof duration === 'number' && duration > 0) {
+      updateFields.duration = duration;
+    }
     const test = await Test.findByIdAndUpdate(
       req.params.id,
-      { isActive: true, startDate, endDate },
+      updateFields,
       { new: true, runValidators: true }
     );
     if (!test) {
@@ -191,6 +293,11 @@ router.put('/:id/activate', auth, isAdmin, async (req, res) => {
     res.json({ success: true, message: 'Test activated', test });
   } catch (error) {
     console.error('Activate test error:', error);
+    if (error.name === 'ValidationError') {
+      // Send validation error details to frontend
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ success: false, message: messages.join(', '), error: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to activate test', error: error.message });
   }
 });
@@ -220,9 +327,27 @@ router.put('/:id/deactivate', auth, isAdmin, async (req, res) => {
 // @access  Private (Admin)
 router.put('/:id', auth, isAdmin, async (req, res) => {
   try {
+    const {
+      requireAllQuestions,
+      allowNavigation,
+      tabSwitchLimit,
+      deviceRestriction,
+      allowedBranches,
+      allowedYears,
+      ...otherFields
+    } = req.body;
+    const updateFields = {
+      ...otherFields,
+      ...(requireAllQuestions !== undefined ? { requireAllQuestions } : {}),
+      ...(allowNavigation !== undefined ? { allowNavigation } : {}),
+      ...(tabSwitchLimit !== undefined ? { tabSwitchLimit } : {}),
+      ...(deviceRestriction !== undefined ? { deviceRestriction } : {}),
+      ...(allowedBranches !== undefined ? { allowedBranches } : {}),
+      ...(allowedYears !== undefined ? { allowedYears } : {})
+    };
     const test = await Test.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateFields,
       { new: true, runValidators: true }
     );
 
@@ -240,6 +365,11 @@ router.put('/:id', auth, isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Update test error:', error);
+    if (error.name === 'ValidationError') {
+      // Send validation error details to frontend
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ success: false, message: messages.join(', '), error: error.message });
+    }
     res.status(500).json({ 
       success: false,
       message: 'Failed to update test',
@@ -298,7 +428,7 @@ router.post('/:id/submit', auth, async (req, res) => {
         message: 'You have already attempted this test.'
       });
     }
-    const { answers, timeTaken } = req.body;
+    let { answers, timeTaken, autoSubmit } = req.body;
     const test = await Test.findById(req.params.id);
     if (!test) {
       return res.status(404).json({ 
@@ -306,18 +436,86 @@ router.post('/:id/submit', auth, async (req, res) => {
         message: 'Test not found' 
       });
     }
-    // Calculate score
+
+    // When autoSubmit (e.g., due to violations/time), bypass requireAllQuestions hard requirement
+    // and pad answers to length of questions
+    if (autoSubmit) {
+      if (!answers || !Array.isArray(answers)) answers = [];
+      const padded = Array(test.questions.length).fill({});
+      for (let i = 0; i < answers.length && i < padded.length; i++) padded[i] = answers[i] || {};
+      answers = padded;
+    } else if (test.requireAllQuestions) {
+      // Enforce required answers only for normal submissions
+      if (!answers || answers.length !== test.questions.length || answers.some(a => a.selectedAnswer === undefined || a.selectedAnswer === null)) {
+        return res.status(400).json({
+          success: false,
+          message: 'All questions must be answered for this test.'
+        });
+      }
+    } else {
+      // If skipping is allowed, fill missing answers with null selectedAnswer
+      if (!answers || answers.length !== test.questions.length) {
+        // pad answers array to match questions length
+        const filled = Array(test.questions.length).fill({});
+        answers = answers || [];
+        for (let i = 0; i < answers.length; i++) filled[i] = answers[i];
+        answers = filled;
+      }
+    }
+
+    // Enforce single-choice backend validation
+    for (let i = 0; i < test.questions.length; i++) {
+      const q = test.questions[i];
+      const ans = answers[i];
+      if (q.type === 'single') {
+        // Accept both array and number for backward compatibility
+        if (Array.isArray(ans.selectedAnswer)) {
+          if (ans.selectedAnswer.length !== 1) {
+            return res.status(400).json({
+              success: false,
+              message: `Only one answer allowed for question ${i + 1}`
+            });
+          }
+        }
+      }
+    }
+
     let score = 0;
-    const processedAnswers = answers.map((answer, index) => {
-      const question = test.questions[index];
-      const isCorrect = answer.selectedAnswer === question.correctAnswer;
+    // Allow skipped answers if not required or when autoSubmit forced
+    const processedAnswers = test.questions.map((question, index) => {
+      const answer = answers && answers[index] ? answers[index] : {};
+
+      // Normalize selected to an index (number) or null
+      let selectedIndex = null;
+      if (answer.selectedAnswer !== undefined && answer.selectedAnswer !== null) {
+        const sel = answer.selectedAnswer;
+        if (Array.isArray(sel)) {
+          // take first element for single-choice legacy payloads
+          if (sel.length > 0) {
+            const first = sel[0];
+            if (typeof first === 'number') {
+              selectedIndex = first;
+            } else if (typeof first === 'string') {
+              selectedIndex = question.options.findIndex(o => o === first);
+              if (selectedIndex === -1) selectedIndex = null;
+            }
+          }
+        } else if (typeof sel === 'number') {
+          selectedIndex = sel;
+        } else if (typeof sel === 'string') {
+          selectedIndex = question.options.findIndex(o => o === sel);
+          if (selectedIndex === -1) selectedIndex = null;
+        }
+      }
+
+      const isCorrect = selectedIndex !== null && selectedIndex === question.correctAnswer;
       const points = isCorrect ? question.points : 0;
-      score += points;
+      if (selectedIndex !== null) score += points;
       return {
         questionIndex: index,
-        selectedAnswer: answer.selectedAnswer,
-        isCorrect,
-        points
+        selectedAnswer: selectedIndex, // store index to satisfy schema
+        isCorrect: selectedIndex !== null ? isCorrect : false,
+        points: selectedIndex !== null ? points : 0
       };
     });
     const totalScore = test.questions.reduce((sum, q) => sum + q.points, 0);
@@ -417,4 +615,5 @@ router.get('/results/all', auth, isAdmin, async (req, res) => {
 router.get('/:id/analytics', auth, isAdmin, getTestAnalytics);
 
 module.exports = router;
+
 

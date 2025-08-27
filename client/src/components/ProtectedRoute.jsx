@@ -44,3 +44,5 @@ const ProtectedRoute = ({ children, requireAuth = true, requiredRole }) => {
 
 export default ProtectedRoute;
 
+
+

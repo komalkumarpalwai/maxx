@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, User, FileText, BarChart3, Settings, GraduationCap, Info } from 'lucide-react';
 import { useUser } from '../context/UserContext';
@@ -59,6 +59,34 @@ const Sidebar = () => {
 
   const isActive = (path) => location.pathname === path;
 
+  // Disable navigation only when an exam is active AND the app is in fullscreen
+  let examActive = false;
+  try { examActive = localStorage.getItem('examActive') === '1'; } catch {}
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const fs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+      setIsFullscreen(fs);
+    };
+    check();
+    document.addEventListener('fullscreenchange', check);
+    document.addEventListener('webkitfullscreenchange', check);
+    document.addEventListener('mozfullscreenchange', check);
+    document.addEventListener('MSFullscreenChange', check);
+    return () => {
+      document.removeEventListener('fullscreenchange', check);
+      document.removeEventListener('webkitfullscreenchange', check);
+      document.removeEventListener('mozfullscreenchange', check);
+      document.removeEventListener('MSFullscreenChange', check);
+    };
+  }, []);
+
+  const handleNav = (path, disabled) => {
+    if (disabled) return;
+    navigate(path);
+  };
+
   return (
     <aside className="sidebar w-64">
       <div className="p-6">
@@ -73,42 +101,46 @@ const Sidebar = () => {
         </div>
 
         <nav className="space-y-2">
-          {menuItems.map((item) => (
-            <div key={item.label}>
-              <button
-                onClick={() => navigate(item.path)}
-                className={`nav-link w-full ${
-                  isActive(item.path) ? 'nav-link-active' : 'nav-link-inactive'
-                }`}
-              >
-                <item.icon 
-                  className={`w-5 h-5 ${
-                    isActive(item.path) ? 'text-blue-600' : 'text-gray-500'
-                  }`} 
-                />
-                <div className="flex-1">
-                  <div className="font-medium">{item.label}</div>
-                  <div className={`text-xs ${
-                    isActive(item.path) ? 'text-blue-500' : 'text-gray-400'
-                  }`}>
-                    {item.description}
+          {menuItems.map((item) => {
+            const disabled = examActive && isFullscreen && !isActive(item.path) && item.path !== '/tests';
+            return (
+              <div key={item.label}>
+                <button
+                  onClick={() => handleNav(item.path, disabled)}
+                  className={`nav-link w-full ${
+                    isActive(item.path) ? 'nav-link-active' : 'nav-link-inactive'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                  disabled={disabled}
+                  title={disabled ? 'Disabled in fullscreen exam' : undefined}
+                >
+                  <item.icon 
+                    className={`w-5 h-5 ${
+                      isActive(item.path) ? 'text-blue-600' : 'text-gray-500'
+                    }`} 
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">{item.label}</div>
+                    <div className={`text-xs ${
+                      isActive(item.path) ? 'text-blue-500' : 'text-gray-400'
+                    }`}>
+                      {item.description}
+                    </div>
                   </div>
-                </div>
-              </button>
-              
-              {/* Profile Update Limit Indicator */}
-              {item.label === 'Profile' && remainingUpdates < 2 && (
-                <div className="ml-12 mb-2 p-2 bg-blue-50 rounded-md border border-blue-200">
-                  <div className="flex items-center space-x-2">
-                    <Info className="w-3 h-3 text-blue-600" />
-                    <span className="text-xs text-blue-700">
-                      {remainingUpdates} update{remainingUpdates !== 1 ? 's' : ''} remaining
-                    </span>
+                </button>
+                {/* Profile Update Limit Indicator */}
+                {item.label === 'Profile' && remainingUpdates < 2 && (
+                  <div className="ml-12 mb-2 p-2 bg-blue-50 rounded-md border border-blue-200">
+                    <div className="flex items-center space-x-2">
+                      <Info className="w-3 h-3 text-blue-600" />
+                      <span className="text-xs text-blue-700">
+                        {remainingUpdates} update{remainingUpdates !== 1 ? 's' : ''} remaining
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </nav>
       </div>
     </aside>
