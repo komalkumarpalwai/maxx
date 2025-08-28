@@ -123,10 +123,10 @@ const TestTaking = () => {
     (async () => {
       setAttemptCheckLoading(true);
       setError("");
-
       try {
-        // Check if test was already attempted
+        console.log('[TestTaking] Checking if test already attempted...');
         const res = await api.get("/tests/results/student");
+        console.log('[TestTaking] /tests/results/student response:', res);
         if (res?.data?.results) {
           const attempted = res.data.results.some(
             (r) => r.test && (r.test._id === id || r.test === id)
@@ -134,8 +134,9 @@ const TestTaking = () => {
           if (attempted) setAlreadyAttempted(true);
         }
 
-        // Fetch test details
+        console.log('[TestTaking] Fetching test details...');
         const { data } = await api.get(`/tests/${id}`);
+        console.log('[TestTaking] /tests/:id response:', data);
         if (cancelled) return;
 
         const testObj = data.test || data;
@@ -157,11 +158,12 @@ const TestTaking = () => {
           if (timeLeft === null && dur !== null) setTimeLeft(dur * 60);
         }
       } catch (err) {
-        console.error('Failed to load test:', err);
+        console.error('[TestTaking] Failed to load test:', err);
         setError("Failed to load test.");
         setTest(null);
       } finally {
         if (!cancelled) {
+          console.log('[TestTaking] Setting loading to false');
           setLoading(false);
           setAttemptCheckLoading(false);
         }
