@@ -135,10 +135,14 @@ const Results = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Your Results</h1>
           <p className="text-gray-600">View your scores and performance across tests.</p>
+          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-400 text-yellow-800 rounded text-sm">
+            <b>Note:</b> Please use the <b>Reload</b> button below to refresh this page. Do <b>not</b> use your browser or device reload button, or you may lose your session or data.
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportAll} className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded border">Download All CSV</button>
           <button onClick={fetchResults} className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">Refresh</button>
+          <button onClick={() => window.location.reload()} className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded">Reload</button>
         </div>
       </div>
 

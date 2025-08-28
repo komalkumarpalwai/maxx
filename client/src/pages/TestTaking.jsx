@@ -648,10 +648,16 @@ const TestTaking = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex flex-col justify-center items-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading test...</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition"
+          >
+            Reload
+          </button>
         </div>
       </div>
     );
@@ -664,13 +670,21 @@ const TestTaking = () => {
         <div className="bg-white rounded-lg shadow-lg p-8 border border-gray-200 max-w-lg w-full text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">❌ Error</h1>
           <p className="text-gray-700 mb-6">{error}</p>
-          <Button 
-            onClick={() => navigate("/tests")} 
-            variant="primary"
-            aria-label="Return to tests page"
-          >
-            Back to Tests
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button 
+              onClick={() => navigate("/tests")} 
+              variant="primary"
+              aria-label="Return to tests page"
+            >
+              Back to Tests
+            </Button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition"
+            >
+              Reload
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -812,6 +826,18 @@ const TestTaking = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-2 md:p-4 lg:p-6" aria-label="Test Taking Page">
+      {/* Reload warning and button */}
+      <div className="mb-4 p-2 bg-yellow-50 border border-yellow-400 text-yellow-800 rounded text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <span>
+          <b>Note:</b> Please use the <b>Reload</b> button below to refresh this page. Do <b>not</b> use your browser or device reload button, or you may lose your session or data.
+        </span>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded"
+        >
+          Reload
+        </button>
+      </div>
       <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 md:gap-6">
         {/* Main test area */}
         <div className="lg:col-span-3 space-y-4 w-full">

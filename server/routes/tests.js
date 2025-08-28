@@ -478,7 +478,8 @@ router.post('/:id/submit', auth, async (req, res) => {
     const processedAnswers = test.questions.map((question, index) => {
       const answer = answers && answers[index] ? answers[index] : {};
       const selectedAnswer = (answer.selectedAnswer !== undefined && answer.selectedAnswer !== null) ? answer.selectedAnswer : null;
-      const isCorrect = selectedAnswer === question.correctAnswer;
+  // Ensure both are numbers for comparison
+  const isCorrect = selectedAnswer !== null && Number(selectedAnswer) === Number(question.correctAnswer);
       const points = isCorrect ? question.points : 0;
       if (selectedAnswer !== null) score += points;
       return {
