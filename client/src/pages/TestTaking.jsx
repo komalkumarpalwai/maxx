@@ -19,12 +19,7 @@ function getQuestionKey(q, idx) {
 /**
  * Determine if a question is single-choice (radio) or multiple-choice (checkbox)
  */
-function isSingleType(q) {
-  const t = (q?.type || "").toLowerCase();
-  if (t === "single" || t === "radio" || t === "single-choice") return true;
-  if (!q?.type && Array.isArray(q?.options) && q.options.length === 2) return true;
-  return false;
-}
+
 
 /**
  * Format seconds into MM:SS display format
@@ -124,11 +119,11 @@ const TestTaking = () => {
    */
   useEffect(() => {
     let cancelled = false;
-    
+
     (async () => {
       setAttemptCheckLoading(true);
       setError("");
-      
+
       try {
         // Check if test was already attempted
         const res = await api.get("/tests/results/student");
@@ -138,11 +133,11 @@ const TestTaking = () => {
           );
           if (attempted) setAlreadyAttempted(true);
         }
-        
+
         // Fetch test details
         const { data } = await api.get(`/tests/${id}`);
         if (cancelled) return;
-        
+
         const testObj = data.test || data;
         if (
           !testObj ||
@@ -172,11 +167,11 @@ const TestTaking = () => {
         }
       }
     })();
-    
+
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, timeLeft]);
 
   /**
    * Persist test state to localStorage whenever it changes
@@ -484,16 +479,12 @@ const TestTaking = () => {
    * Handle answer selection with proper single/multiple choice logic
    */
   const handleAnswer = useCallback((questionIndex, option) => {
-    if (!test?.questions?.[questionIndex]) return;
-    
-    const q = test.questions[questionIndex];
-    const key = getQuestionKey(q, questionIndex);
-    const isSingle = isSingleType(q);
-    
+  if (!test?.questions?.[questionIndex]) return;
+  const q = test.questions[questionIndex];
+  const key = getQuestionKey(q, questionIndex);
   setAnswers(prev => ({ ...prev, [key]: option }));
-    
-    // Mark as visited
-    setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
+  // Mark as visited
+  setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
   }, [test]);
 
   /**
@@ -545,12 +536,13 @@ const TestTaking = () => {
   const handleSubmitTest = useCallback(async () => {
     if (isSubmittingRef.current) return;
     
+
     // Check for unanswered questions
     const unanswered = test.questions.filter((q, idx) => {
       const key = getQuestionKey(q, idx);
-      return !Array.isArray(answers[key]) || answers[key].length === 0;
+      return !answers[key];
     });
-    
+
     if (unanswered.length > 0) {
       toast.error(
         `Please answer all questions before submitting. (${unanswered.length} unanswered)`,
@@ -559,6 +551,7 @@ const TestTaking = () => {
       return;
     }
     
+
     // Confirm submission
     const ok = window.confirm(
       "Are you sure you want to submit the test? This action cannot be undone."
@@ -574,28 +567,18 @@ const TestTaking = () => {
         totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0)
       );
       const timeTaken = Math.ceil(usedSeconds / 60);
-      
+
       // Transform answers to backend format: array of { selectedAnswer }
       const payloadAnswers = test.questions.map((q, idx) => {
         const key = getQuestionKey(q, idx);
-        const ans = answersRef.current[key];
-        
-        if (isSingleType(q)) {
-          return { 
-            selectedAnswer: Array.isArray(ans) && ans.length > 0 ? ans[0] : null 
-          };
-        } else {
-          return { 
-            selectedAnswer: Array.isArray(ans) ? ans : [] 
-          };
-        }
+        return { selectedAnswer: answersRef.current[key] || null };
       });
-      
+
       await api.post(`/tests/${id}/submit`, { 
         answers: payloadAnswers, 
         timeTaken 
       });
-      
+
       localStorage.removeItem(localStorageKey);
       toast.success("✅ Test submitted successfully!");
       navigate("/tests");
@@ -619,7 +602,7 @@ const TestTaking = () => {
     if (markForReview[key]) {
       return "bg-purple-500 text-white";
     }
-    if (Array.isArray(answers[key]) && answers[key].length > 0) {
+    if (answers[key]) {
       return "bg-green-500 text-white";
     }
     if (visited.has(key)) {
@@ -629,9 +612,7 @@ const TestTaking = () => {
   }, [currentQuestionIndex, markForReview, answers, visited]);
 
   // Calculate progress statistics
-  const answeredCount = Object.values(answers).filter(
-    a => Array.isArray(a) && a.length > 0
-  ).length;
+  const answeredCount = Object.values(answers).filter(a => !!a).length;
   
   const totalQuestions = test?.questions?.length || 0;
   const progressPercentage = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
@@ -854,22 +835,25 @@ const TestTaking = () => {
           <div className="space-y-3">
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
-              // Always use radio buttons for all questions
               const selected = answers[key] === opt;
               return (
                 <label 
                   key={i} 
-                  className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  aria-label={`Select option ${i + 1}`}
+                  className={`flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors ${selected ? 'bg-blue-50 border-blue-400' : ''}`}
+                  aria-label={`Select option ${i + 1}${selected ? ' (selected)' : ''}`}
+                  tabIndex={0}
+                  htmlFor={`option-${currentQuestionIndex}-${i}`}
                 >
                   <input
+                    id={`option-${currentQuestionIndex}-${i}`}
                     type="radio"
                     name={`question-${currentQuestionIndex}`}
                     value={opt}
                     checked={selected}
                     onChange={() => handleAnswer(currentQuestionIndex, opt)}
-                    className="mt-1"
-                    aria-label={`Radio option ${i + 1}`}
+                    className="mt-1 focus:ring-2 focus:ring-blue-400"
+                    aria-checked={selected}
+                    aria-label={`Radio option ${i + 1}${selected ? ' (selected)' : ''}`}
                   />
                   <span className="text-base leading-relaxed">{opt}</span>
                 </label>
