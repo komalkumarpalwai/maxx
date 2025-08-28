@@ -5,7 +5,7 @@ import { Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import toast from 'react-hot-toast';
-import ConnectionTest from '../components/ConnectionTest';
+
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -193,7 +193,7 @@ const Login = () => {
         
         {/* Connection Test - Remove after fixing */}
         <div className="mt-8">
-          <ConnectionTest />
+
         </div>
       </div>
     </div>

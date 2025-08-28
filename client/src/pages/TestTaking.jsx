@@ -1,22 +1,34 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Button from "../components/Button";
 import toast from "react-hot-toast";
 import api from "../services/api";
 
-const VIOLATION_LIMIT = 2;
-const LOW_TIME_WARNING = 120;
+// Constants for better maintainability
+const VIOLATION_LIMIT = 3; // Changed from 2 to 3 as requested
+const LOW_TIME_WARNING = 120; // 2 minutes warning
+const WARNING_TOAST_ID = 'low-time-warning'; // Prevent duplicate warnings
 
+/**
+ * Generate a unique key for each question to ensure consistent identification
+ */
 function getQuestionKey(q, idx) {
   return q?._id ? String(q._id) : `q-${idx}`;
 }
+
+/**
+ * Determine if a question is single-choice (radio) or multiple-choice (checkbox)
+ */
 function isSingleType(q) {
   const t = (q?.type || "").toLowerCase();
   if (t === "single" || t === "radio" || t === "single-choice") return true;
-  // Fallback: if only two options and no type, treat as single-choice
   if (!q?.type && Array.isArray(q?.options) && q.options.length === 2) return true;
   return false;
 }
+
+/**
+ * Format seconds into MM:SS display format
+ */
 function formatTime(sec) {
   if (typeof sec !== "number" || sec < 0) return "--:--";
   const m = Math.floor(sec / 60);
@@ -27,39 +39,60 @@ function formatTime(sec) {
 const TestTaking = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  // Core test state
   const [test, setTest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  
+  // Test attempt state
   const [alreadyAttempted, setAlreadyAttempted] = useState(false);
   const [attemptCheckLoading, setAttemptCheckLoading] = useState(true);
+  
+  // Test progress state
   const [answers, setAnswers] = useState({});
   const [visited, setVisited] = useState(new Set());
   const [markForReview, setMarkForReview] = useState({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  
+  // Timer state
   const [durationMinutes, setDurationMinutes] = useState(null);
   const [timeLeft, setTimeLeft] = useState(null);
+  
+  // Test session state
   const [testStarted, setTestStarted] = useState(false);
   const [resumeAvailable, setResumeAvailable] = useState(false);
   const [agreeInstructions, setAgreeInstructions] = useState(false);
+  
+  // Violation tracking
   const [violations, setViolations] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Refs for preventing race conditions
   const isSubmittingRef = useRef(false);
   const warnedRef = useRef(false);
   const answersRef = useRef(answers);
   const durationRef = useRef(durationMinutes);
+  
+  // Local storage key for persistence
   const localStorageKey = `testState-${id}`;
 
+  // Keep refs in sync with state
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
+  
   useEffect(() => {
     durationRef.current = durationMinutes;
   }, [durationMinutes]);
 
-  // Restore state
+  /**
+   * Restore test state from localStorage on component mount
+   */
   useEffect(() => {
     const raw = localStorage.getItem(localStorageKey);
     if (!raw) return;
+    
     try {
       const parsed = JSON.parse(raw);
       setAnswers(parsed.answers || {});
@@ -81,16 +114,23 @@ const TestTaking = () => {
           Object.keys(parsed.answers || {}).length > 0 ||
           parsed.timeLeft !== null
       );
-    } catch {}
-  }, [id]);
+    } catch (error) {
+      console.error('Failed to restore test state:', error);
+    }
+  }, [id, localStorageKey]);
 
-  // Fetch test and attempt check
+  /**
+   * Fetch test data and check if already attempted
+   */
   useEffect(() => {
     let cancelled = false;
+    
     (async () => {
       setAttemptCheckLoading(true);
       setError("");
+      
       try {
+        // Check if test was already attempted
         const res = await api.get("/tests/results/student");
         if (res?.data?.results) {
           const attempted = res.data.results.some(
@@ -98,8 +138,11 @@ const TestTaking = () => {
           );
           if (attempted) setAlreadyAttempted(true);
         }
+        
+        // Fetch test details
         const { data } = await api.get(`/tests/${id}`);
         if (cancelled) return;
+        
         const testObj = data.test || data;
         if (
           !testObj ||
@@ -119,6 +162,7 @@ const TestTaking = () => {
           if (timeLeft === null && dur !== null) setTimeLeft(dur * 60);
         }
       } catch (err) {
+        console.error('Failed to load test:', err);
         setError("Failed to load test.");
         setTest(null);
       } finally {
@@ -126,12 +170,15 @@ const TestTaking = () => {
         setAttemptCheckLoading(false);
       }
     })();
+    
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, timeLeft]);
 
-  // Persist state
+  /**
+   * Persist test state to localStorage whenever it changes
+   */
   useEffect(() => {
     const state = {
       answers,
@@ -141,9 +188,12 @@ const TestTaking = () => {
       timeLeft,
       testStarted,
     };
+    
     try {
       localStorage.setItem(localStorageKey, JSON.stringify(state));
-    } catch {}
+    } catch (error) {
+      console.error('Failed to save test state:', error);
+    }
   }, [
     answers,
     currentQuestionIndex,
@@ -154,10 +204,13 @@ const TestTaking = () => {
     localStorageKey,
   ]);
 
-  // beforeunload
+  /**
+   * Handle page unload to save progress
+   */
   useEffect(() => {
     const handler = (e) => {
       if (!testStarted) return;
+      
       try {
         localStorage.setItem(
           localStorageKey,
@@ -170,11 +223,15 @@ const TestTaking = () => {
             testStarted,
           })
         );
-      } catch {}
+      } catch (error) {
+        console.error('Failed to save on unload:', error);
+      }
+      
       e.preventDefault();
       e.returnValue =
         "Your test is in progress. If you close this tab you may lose data.";
     };
+    
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [
@@ -187,13 +244,18 @@ const TestTaking = () => {
     localStorageKey,
   ]);
 
-  // Timer
+  /**
+   * Main timer logic with auto-submission
+   */
   useEffect(() => {
     if (!testStarted || timeLeft === null) return;
+    
     if (timeLeft <= 0) {
       if (isSubmittingRef.current) return;
+      
       (async () => {
         isSubmittingRef.current = true;
+        
         try {
           const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
           const usedSeconds = Math.max(
@@ -201,19 +263,24 @@ const TestTaking = () => {
             totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0)
           );
           const timeTaken = Math.ceil(usedSeconds / 60);
+          
           await api.post(`/tests/${id}/submit`, {
             answers: answersRef.current,
             timeTaken,
           });
+          
           localStorage.removeItem(localStorageKey);
-          toast.success("Test auto-submitted (time up)");
+          toast.success("⏰ Test auto-submitted (time up)");
           navigate("/tests");
-        } catch {
+        } catch (error) {
+          console.error('Auto submission failed:', error);
           toast.error("Auto submission failed");
         }
       })();
+      
       return;
     }
+    
     const timerId = setInterval(
       () =>
         setTimeLeft((prev) =>
@@ -221,41 +288,76 @@ const TestTaking = () => {
         ),
       1000
     );
+    
     return () => clearInterval(timerId);
   }, [testStarted, timeLeft, id, durationMinutes, navigate, localStorageKey]);
 
-  // Low time warning
+  /**
+   * Show 2-minute warning toast
+   */
   useEffect(() => {
-    if (timeLeft !== null && timeLeft <= LOW_TIME_WARNING && testStarted) {
-      toast.error("⚠️ Only 2 minutes left! Please submit soon.");
+    if (timeLeft !== null && timeLeft <= LOW_TIME_WARNING && testStarted && !warnedRef.current) {
+      toast.error("⚠️ Only 2 minutes left! Please submit soon.", {
+        id: WARNING_TOAST_ID,
+        duration: 5000,
+      });
       warnedRef.current = true;
     }
   }, [timeLeft, testStarted]);
 
-  // Mark visited
+  /**
+   * Mark current question as visited
+   */
   useEffect(() => {
     if (!test?.questions?.[currentQuestionIndex]) return;
+    
     const key = getQuestionKey(test.questions[currentQuestionIndex], currentQuestionIndex);
     setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
   }, [currentQuestionIndex, test]);
 
-  // Fullscreen & tab switch detection
+  /**
+   * Fullscreen & tab switch detection for violation tracking
+   */
   useEffect(() => {
     if (!testStarted) return;
-    const isDocFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+    
+    const isDocFullscreen = () => !!(
+      document.fullscreenElement || 
+      document.webkitFullscreenElement || 
+      document.mozFullScreenElement || 
+      document.msFullscreenElement
+    );
+    
     const handleVisibility = () => {
-      if (document.hidden) setViolations(v => v + 1);
+      if (document.hidden) {
+        setViolations(v => v + 1);
+        toast.error(`⚠️ Tab switch detected! Violation ${Math.min(violations + 1, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+      }
     };
+    
     const handleFullscreen = () => {
-      setIsFullscreen(isDocFullscreen());
-      if (!isDocFullscreen()) setViolations(v => v + 1);
+      const wasFullscreen = isFullscreen;
+      const nowFullscreen = isDocFullscreen();
+      
+      setIsFullscreen(nowFullscreen);
+      
+      // Only count violation if exiting fullscreen
+      if (wasFullscreen && !nowFullscreen) {
+        setViolations(v => v + 1);
+        toast.error(`⚠️ Fullscreen exit detected! Violation ${Math.min(violations + 1, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+      }
     };
+    
+    // Add event listeners for all browser variants
     document.addEventListener("visibilitychange", handleVisibility);
     document.addEventListener("fullscreenchange", handleFullscreen);
     document.addEventListener("webkitfullscreenchange", handleFullscreen);
     document.addEventListener("mozfullscreenchange", handleFullscreen);
     document.addEventListener("MSFullscreenChange", handleFullscreen);
+    
+    // Set initial fullscreen state
     setIsFullscreen(isDocFullscreen());
+    
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       document.removeEventListener("fullscreenchange", handleFullscreen);
@@ -263,29 +365,50 @@ const TestTaking = () => {
       document.removeEventListener("mozfullscreenchange", handleFullscreen);
       document.removeEventListener("MSFullscreenChange", handleFullscreen);
     };
-  }, [testStarted]);
+  }, [testStarted, isFullscreen, violations]);
 
-  // Auto-submit on violation
+  /**
+   * Auto-submit test after 3 violations
+   */
   useEffect(() => {
-    if (violations > VIOLATION_LIMIT && testStarted && !isSubmittingRef.current) {
+    if (violations >= VIOLATION_LIMIT && testStarted && !isSubmittingRef.current) {
       isSubmittingRef.current = true;
+      
+      // Show violation message before submission
+      toast.error("❌ Test ended due to rule violations (3 strikes)", {
+        duration: 3000,
+      });
+      
       (async () => {
         try {
           const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
-          const usedSeconds = Math.max(0, totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0));
+          const usedSeconds = Math.max(
+            0, 
+            totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0)
+          );
           const timeTaken = Math.ceil(usedSeconds / 60);
-          await api.post(`/tests/${id}/submit`, { answers: answersRef.current, timeTaken, forced: true, autoSubmitReason: "violation" });
+          
+          await api.post(`/tests/${id}/submit`, { 
+            answers: answersRef.current, 
+            timeTaken, 
+            forced: true, 
+            autoSubmitReason: "violation" 
+          });
+          
           localStorage.removeItem(localStorageKey);
-          toast.error("Test auto-submitted due to rule violation");
+          toast.error("Test auto-submitted due to rule violations");
           navigate("/tests");
-        } catch {
+        } catch (error) {
+          console.error('Violation auto-submission failed:', error);
           toast.error("Auto submission failed");
         }
       })();
     }
   }, [violations, testStarted, id, durationMinutes, timeLeft, navigate, localStorageKey]);
 
-  // Guards
+  /**
+   * Redirect if test already attempted
+   */
   useEffect(() => {
     if (alreadyAttempted && !attemptCheckLoading) {
       toast.error("You have already attempted this test.");
@@ -293,20 +416,32 @@ const TestTaking = () => {
     }
   }, [alreadyAttempted, attemptCheckLoading, navigate]);
 
-  // Handlers
-  const handleStartTest = async () => {
+  /**
+   * Start new test session
+   */
+  const handleStartTest = useCallback(async () => {
     if (!durationMinutes) {
       toast.error("Test duration not available.");
       return;
     }
+    
     if (!agreeInstructions) {
       toast.error("Please agree to the instructions.");
       return;
     }
+    
     try {
-      if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
-      else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
-    } catch {}
+      // Request fullscreen
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
+      }
+    } catch (error) {
+      console.warn('Fullscreen request failed:', error);
+    }
+    
+    // Reset test state
     setAnswers({});
     setVisited(new Set());
     setMarkForReview({});
@@ -314,198 +449,541 @@ const TestTaking = () => {
     setTimeLeft(durationMinutes * 60);
     setTestStarted(true);
     setResumeAvailable(false);
+    setViolations(0);
     warnedRef.current = false;
-  };
-  const handleResumeTest = async () => {
+  }, [durationMinutes, agreeInstructions]);
+
+  /**
+   * Resume existing test session
+   */
+  const handleResumeTest = useCallback(async () => {
     try {
-      if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
-      else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
-    } catch {}
-    if (timeLeft === null && durationMinutes) setTimeLeft(durationMinutes * 60);
+      // Request fullscreen
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
+      }
+    } catch (error) {
+      console.warn('Fullscreen request failed:', error);
+    }
+    
+    if (timeLeft === null && durationMinutes) {
+      setTimeLeft(durationMinutes * 60);
+    }
+    
     setTestStarted(true);
     setResumeAvailable(false);
     warnedRef.current = false;
-  };
-  const handleAnswer = (questionIndex, option) => {
+  }, [timeLeft, durationMinutes]);
+
+  /**
+   * Handle answer selection with proper single/multiple choice logic
+   */
+  const handleAnswer = useCallback((questionIndex, option) => {
     if (!test?.questions?.[questionIndex]) return;
+    
     const q = test.questions[questionIndex];
     const key = getQuestionKey(q, questionIndex);
+    const isSingle = isSingleType(q);
+    
     setAnswers(prev => {
-      if (isSingleType(q)) return { ...prev, [key]: [option] };
-      const prevForQ = Array.isArray(prev[key]) ? prev[key] : [];
-      const exists = prevForQ.includes(option);
-      const updated = exists ? prevForQ.filter(o => o !== option) : [...prevForQ, option];
-      return { ...prev, [key]: updated };
+      if (isSingle) {
+        // Single choice: replace previous answer
+        return { ...prev, [key]: [option] };
+      } else {
+        // Multiple choice: toggle option
+        const prevForQ = Array.isArray(prev[key]) ? prev[key] : [];
+        const exists = prevForQ.includes(option);
+        const updated = exists 
+          ? prevForQ.filter(o => o !== option) 
+          : [...prevForQ, option];
+        return { ...prev, [key]: updated };
+      }
     });
+    
+    // Mark as visited
     setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
-  };
-  const handleMarkForReview = () => {
+  }, [test]);
+
+  /**
+   * Mark question for review and advance to next
+   */
+  const handleMarkForReview = useCallback(() => {
     if (!test?.questions?.[currentQuestionIndex]) return;
+    
     const q = test.questions[currentQuestionIndex];
     const key = getQuestionKey(q, currentQuestionIndex);
+    
     setMarkForReview(prev => ({ ...prev, [key]: !prev[key] }));
-    if (currentQuestionIndex < (test.questions?.length || 0) - 1) setCurrentQuestionIndex(i => i + 1);
-  };
-  const handleClearResponse = () => {
+    
+    // Auto-advance to next question if not at the end
+    if (currentQuestionIndex < (test.questions?.length || 0) - 1) {
+      setCurrentQuestionIndex(i => i + 1);
+    }
+  }, [currentQuestionIndex, test]);
+
+  /**
+   * Clear response for current question
+   */
+  const handleClearResponse = useCallback(() => {
     if (!test?.questions?.[currentQuestionIndex]) return;
+    
     const q = test.questions[currentQuestionIndex];
     const key = getQuestionKey(q, currentQuestionIndex);
-    setAnswers(prev => { const copy = { ...prev }; delete copy[key]; return copy; });
+    
+    setAnswers(prev => {
+      const copy = { ...prev };
+      delete copy[key];
+      return copy;
+    });
+    
     setMarkForReview(prev => ({ ...prev, [key]: false }));
-  };
-  const handleGoToQuestion = (index) => {
+  }, [currentQuestionIndex, test]);
+
+  /**
+   * Navigate to specific question
+   */
+  const handleGoToQuestion = useCallback((index) => {
     if (index < 0 || index >= (test.questions?.length || 0)) return;
     setCurrentQuestionIndex(index);
-  };
-  const handleSubmitTest = async () => {
+  }, [test]);
+
+  /**
+   * Submit test with validation and confirmation
+   */
+  const handleSubmitTest = useCallback(async () => {
     if (isSubmittingRef.current) return;
-    // Pre-submit: check all questions answered
+    
+    // Check for unanswered questions
     const unanswered = test.questions.filter((q, idx) => {
       const key = getQuestionKey(q, idx);
       return !Array.isArray(answers[key]) || answers[key].length === 0;
     });
+    
     if (unanswered.length > 0) {
-      toast.error(`Please answer all questions before submitting. (${unanswered.length} unanswered)`);
+      toast.error(
+        `Please answer all questions before submitting. (${unanswered.length} unanswered)`,
+        { duration: 4000 }
+      );
       return;
     }
-    const ok = window.confirm("Are you sure you want to submit the test?");
+    
+    // Confirm submission
+    const ok = window.confirm(
+      "Are you sure you want to submit the test? This action cannot be undone."
+    );
     if (!ok) return;
+    
     isSubmittingRef.current = true;
+    
     try {
       const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
-      const usedSeconds = Math.max(0, totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0));
+      const usedSeconds = Math.max(
+        0, 
+        totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0)
+      );
       const timeTaken = Math.ceil(usedSeconds / 60);
-      // Transform answers to match backend expectations: array of { selectedAnswer }
+      
+      // Transform answers to backend format: array of { selectedAnswer }
       const payloadAnswers = test.questions.map((q, idx) => {
         const key = getQuestionKey(q, idx);
         const ans = answersRef.current[key];
+        
         if (isSingleType(q)) {
-          return { selectedAnswer: Array.isArray(ans) && ans.length > 0 ? ans[0] : null };
+          return { 
+            selectedAnswer: Array.isArray(ans) && ans.length > 0 ? ans[0] : null 
+          };
         } else {
-          return { selectedAnswer: Array.isArray(ans) ? ans : [] };
+          return { 
+            selectedAnswer: Array.isArray(ans) ? ans : [] 
+          };
         }
       });
-      await api.post(`/tests/${id}/submit`, { answers: payloadAnswers, timeTaken });
+      
+      await api.post(`/tests/${id}/submit`, { 
+        answers: payloadAnswers, 
+        timeTaken 
+      });
+      
       localStorage.removeItem(localStorageKey);
-      toast.success("Test submitted successfully");
+      toast.success("✅ Test submitted successfully!");
       navigate("/tests");
     } catch (err) {
-      toast.error("Submission failed");
+      console.error('Test submission failed:', err);
+      toast.error("Submission failed. Please try again.");
       isSubmittingRef.current = false;
     }
-  };
+  }, [test, answers, timeLeft, durationMinutes, id, navigate, localStorageKey]);
 
-  // UI helpers
-  const getPaletteClass = (q, idx) => {
+  /**
+   * Get CSS classes for question palette based on status
+   */
+  const getPaletteClass = useCallback((q, idx) => {
     const key = getQuestionKey(q, idx);
-    if (currentQuestionIndex === idx) return "bg-blue-600 text-white ring-2 ring-blue-400";
-    if (markForReview[key]) return "bg-purple-500 text-white";
-    if (Array.isArray(answers[key]) && answers[key].length > 0) return "bg-green-500 text-white";
-    if (visited.has(key)) return "bg-red-500 text-white";
+    
+    if (currentQuestionIndex === idx) {
+      return "bg-blue-600 text-white ring-2 ring-blue-400";
+    }
+    if (markForReview[key]) {
+      return "bg-purple-500 text-white";
+    }
+    if (Array.isArray(answers[key]) && answers[key].length > 0) {
+      return "bg-green-500 text-white";
+    }
+    if (visited.has(key)) {
+      return "bg-red-500 text-white";
+    }
     return "bg-gray-300 text-gray-700";
-  };
+  }, [currentQuestionIndex, markForReview, answers, visited]);
 
+  // Calculate progress statistics
+  const answeredCount = Object.values(answers).filter(
+    a => Array.isArray(a) && a.length > 0
+  ).length;
+  
+  const totalQuestions = test?.questions?.length || 0;
+  const progressPercentage = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
-  // UI helpers
-  const answeredCount = Object.values(answers).filter(a => Array.isArray(a) && a.length > 0).length;
+  // Resume summary component
   const resumeSummary = resumeAvailable ? (
-    <div className="mb-4 text-sm text-gray-700">
-      <div>Saved progress found for this test.</div>
-      <div>Answered: <strong>{answeredCount}</strong> / {test?.questions?.length || 0}</div>
-      <div>Time left (if resumed): <strong>{formatTime(timeLeft)}</strong></div>
+    <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="text-sm text-blue-800">
+        <div className="font-semibold mb-2">📚 Saved progress found for this test</div>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span className="font-medium">Answered:</span> 
+            <span className="ml-2 font-bold text-green-600">{answeredCount}</span> / {totalQuestions}
+          </div>
+          <div>
+            <span className="font-medium">Time left:</span> 
+            <span className="ml-2 font-bold text-blue-600">{formatTime(timeLeft)}</span>
+          </div>
+        </div>
+        <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+          <div 
+            className="bg-green-500 h-2 rounded-full transition-all duration-300" 
+            style={{ width: `${progressPercentage}%` }}
+          ></div>
+        </div>
+      </div>
     </div>
   ) : null;
 
-  if (loading) return <div className="flex justify-center items-center h-screen"><p>Loading...</p></div>;
-  if (error) return <div className="flex flex-col items-center justify-center h-screen"><div className="bg-white rounded-lg shadow-lg p-8 border border-gray-200 max-w-lg w-full text-center"><h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1><p className="text-gray-700 mb-6">{error}</p><Button onClick={() => navigate("/tests")} variant="primary">Back to Tests</Button></div></div>;
-  if (!test) return <div className="flex justify-center items-center h-screen"><p>Test not found</p></div>;
-
-  const currentQ = test.questions?.[currentQuestionIndex] || null;
-  const currentKey = currentQ ? getQuestionKey(currentQ, currentQuestionIndex) : null;
-
-  if (attemptCheckLoading) {
-    return <div className="flex justify-center items-center h-screen"><p>Loading...</p></div>;
-  }
-  if (alreadyAttempted) {
+  // Loading state
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
-        <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-8 border border-gray-200 text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">You have already attempted this test.</h1>
-          <p className="text-gray-700 mb-6">You cannot retake this test. If you believe this is a mistake, please contact your instructor or admin.</p>
-          <Button onClick={() => navigate("/tests")} variant="primary">Back to Tests</Button>
+      <div className="flex justify-center items-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading test...</p>
         </div>
       </div>
     );
   }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <div className="bg-white rounded-lg shadow-lg p-8 border border-gray-200 max-w-lg w-full text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">❌ Error</h1>
+          <p className="text-gray-700 mb-6">{error}</p>
+          <Button 
+            onClick={() => navigate("/tests")} 
+            variant="primary"
+            aria-label="Return to tests page"
+          >
+            Back to Tests
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Test not found
+  if (!test) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p className="text-gray-600">Test not found</p>
+      </div>
+    );
+  }
+
+  // Attempt check loading
+  if (attemptCheckLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking test status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Already attempted
+  if (alreadyAttempted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+        <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-8 border border-gray-200 text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">
+            🚫 Test Already Attempted
+          </h1>
+          <p className="text-gray-700 mb-6">
+            You cannot retake this test. If you believe this is a mistake, 
+            please contact your instructor or admin.
+          </p>
+          <Button 
+            onClick={() => navigate("/tests")} 
+            variant="primary"
+            aria-label="Return to tests page"
+          >
+            Back to Tests
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Test instructions and start screen
   if (!testStarted) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
         <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-8 border border-gray-200">
+          {/* Test header */}
           <div className="flex items-center justify-between mb-4">
-            <span className="text-base font-semibold text-gray-500 uppercase tracking-wide">Test</span>
-            <span className="text-sm text-gray-400">Duration: <span className="font-semibold text-gray-700">{durationMinutes} min</span></span>
+            <span className="text-base font-semibold text-gray-500 uppercase tracking-wide">
+              Test
+            </span>
+            <span className="text-sm text-gray-400">
+              Duration: <span className="font-semibold text-gray-700">{durationMinutes} min</span>
+            </span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-left">{test.title}</h1>
-          <div className="mb-6"><div className="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4 text-gray-900"><h2 className="font-semibold text-xl text-yellow-800 mb-2 flex items-center gap-2"><svg className="w-6 h-6 text-yellow-500 inline-block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" /></svg>Test Instructions</h2><div className="whitespace-pre-line text-base">{test.instructions && test.instructions.trim().length > 0 ? test.instructions : "Please read all questions carefully. Do not refresh or close the browser during the test. Your answers will be auto-submitted when time is up."}</div></div></div>
+          
+          {/* Test title */}
+          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-left">
+            {test.title}
+          </h1>
+          
+          {/* Instructions */}
+          <div className="mb-6">
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4 text-gray-900">
+              <h2 className="font-semibold text-xl text-yellow-800 mb-2 flex items-center gap-2">
+                <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                Test Instructions
+              </h2>
+              <div className="whitespace-pre-line text-base">
+                {test.instructions && test.instructions.trim().length > 0 
+                  ? test.instructions 
+                  : "Please read all questions carefully. Do not refresh or close the browser during the test. Your answers will be auto-submitted when time is up."
+                }
+              </div>
+            </div>
+          </div>
+          
+          {/* Resume summary */}
           {resumeSummary}
+          
+          {/* Action buttons */}
           {!resumeAvailable ? (
             <>
-              <div className="flex items-center gap-2 mb-6"><input type="checkbox" id="agreeInstructions" checked={!!agreeInstructions} onChange={e => setAgreeInstructions(e.target.checked)} className="mr-2" /><label htmlFor="agreeInstructions" className="text-gray-800 select-none cursor-pointer">I have read and agree to the instructions above.</label></div>
-              <Button onClick={handleStartTest} disabled={!agreeInstructions || !durationMinutes} size="lg" className="w-full">Start Test</Button>
+              <div className="flex items-center gap-2 mb-6">
+                <input 
+                  type="checkbox" 
+                  id="agreeInstructions" 
+                  checked={!!agreeInstructions} 
+                  onChange={e => setAgreeInstructions(e.target.checked)} 
+                  className="mr-2" 
+                  aria-label="Agree to test instructions"
+                />
+                <label htmlFor="agreeInstructions" className="text-gray-800 select-none cursor-pointer">
+                  I have read and agree to the instructions above.
+                </label>
+              </div>
+              <Button 
+                onClick={handleStartTest} 
+                disabled={!agreeInstructions || !durationMinutes} 
+                size="lg" 
+                className="w-full"
+                aria-label="Start test"
+              >
+                Start Test
+              </Button>
             </>
           ) : (
-            <div className="flex flex-col gap-3"><Button onClick={handleResumeTest} size="lg" className="w-full">Resume Test</Button><Button onClick={() => { localStorage.removeItem(localStorageKey); setResumeAvailable(false); setAnswers({}); setVisited(new Set()); setMarkForReview({}); setAgreeInstructions(false); if (durationMinutes) setTimeLeft(durationMinutes * 60); }} variant="secondary" size="lg" className="w-full">Start Fresh (clear saved)</Button></div>
+            <div className="flex flex-col gap-3">
+              <Button 
+                onClick={handleResumeTest} 
+                size="lg" 
+                className="w-full"
+                aria-label="Resume test"
+              >
+                Resume Test
+              </Button>
+              <Button 
+                onClick={() => { 
+                  localStorage.removeItem(localStorageKey); 
+                  setResumeAvailable(false); 
+                  setAnswers({}); 
+                  setVisited(new Set()); 
+                  setMarkForReview({}); 
+                  setAgreeInstructions(false); 
+                  if (durationMinutes) setTimeLeft(durationMinutes * 60); 
+                }} 
+                variant="secondary" 
+                size="lg" 
+                className="w-full"
+                aria-label="Start fresh test"
+              >
+                Start Fresh (clear saved)
+              </Button>
+            </div>
           )}
         </div>
       </div>
     );
   }
-  // Test in progress
+
+  // Test in progress - main interface
+  const currentQ = test.questions?.[currentQuestionIndex] || null;
+  const currentKey = currentQ ? getQuestionKey(currentQ, currentQuestionIndex) : null;
+
   return (
-    <div className="max-w-5xl mx-auto p-2 md:p-4" aria-label="Test Taking Page">
-      <div className="flex flex-col md:grid md:grid-cols-5 gap-4 md:gap-6">
-        <div className="md:col-span-3 space-y-4 w-full">
+    <div className="max-w-6xl mx-auto p-2 md:p-4 lg:p-6" aria-label="Test Taking Page">
+      <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 md:gap-6">
+        {/* Main test area */}
+        <div className="lg:col-span-3 space-y-4 w-full">
+          {/* Header with title and timer */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
-            <span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">{test.title}</span>
-            <span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">{formatTime(timeLeft)}</span>
+            <span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">
+              {test.title}
+            </span>
+            <span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">
+              {formatTime(timeLeft)}
+            </span>
           </div>
-          <div className="mb-2 text-gray-600 text-sm">Question {currentQuestionIndex + 1} of {test.questions.length}</div>
-          <div className="text-lg font-medium mb-2">{currentQ ? (currentQ.question || currentQ.text || currentQ.questionText) : "Question not available"}</div>
-          <div className="space-y-2">
+          
+          {/* Question counter */}
+          <div className="mb-2 text-gray-600 text-sm">
+            Question {currentQuestionIndex + 1} of {test.questions.length}
+          </div>
+          
+          {/* Question text */}
+          <div className="text-lg font-medium mb-4">
+            {currentQ ? (currentQ.question || currentQ.text || currentQ.questionText) : "Question not available"}
+          </div>
+          
+          {/* Answer options */}
+          <div className="space-y-3">
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
               const isSingle = isSingleType(currentQ);
               const selected = Array.isArray(answers[key]) && answers[key].includes(opt);
+              
               return (
-                <label key={i} className="block cursor-pointer text-base md:text-base">
+                <label 
+                  key={i} 
+                  className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                  aria-label={`${isSingle ? 'Select' : 'Toggle'} option ${i + 1}`}
+                >
                   <input
                     type={isSingle ? "radio" : "checkbox"}
-                    name={key}
+                    name={key} // Same name for radio buttons ensures exclusivity
+                    value={opt} // Include value for proper form handling
                     checked={!!selected}
                     onChange={() => handleAnswer(currentQuestionIndex, opt)}
-                    className="mr-2"
+                    className="mt-1"
+                    aria-label={`${isSingle ? 'Radio' : 'Checkbox'} option ${i + 1}`}
                   />
-                  {opt}
+                  <span className="text-base leading-relaxed">{opt}</span>
                 </label>
               );
             })}
           </div>
-          <div className="flex flex-wrap gap-2 mt-6"><Button onClick={handleMarkForReview} variant={markForReview[currentKey] ? "primary" : "secondary"}>{markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}</Button><Button onClick={handleClearResponse} variant="secondary" aria-label="Clear Response">Clear Response</Button><Button disabled={currentQuestionIndex === 0} onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))} variant="secondary" aria-label="Previous Question">Previous</Button>{currentQuestionIndex < test.questions.length - 1 ? (<Button onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))} variant="secondary" aria-label="Next Question">Next</Button>) : (<Button onClick={handleSubmitTest} variant="primary" aria-label="Submit Test">Submit</Button>)}</div>
+          
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2 mt-6">
+            <Button 
+              onClick={handleMarkForReview} 
+              variant={markForReview[currentKey] ? "primary" : "secondary"}
+              aria-label={markForReview[currentKey] ? "Unmark for review" : "Mark for review and next"}
+            >
+              {markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}
+            </Button>
+            
+            <Button 
+              onClick={handleClearResponse} 
+              variant="secondary" 
+              aria-label="Clear response for current question"
+            >
+              Clear Response
+            </Button>
+            
+            <Button 
+              disabled={currentQuestionIndex === 0} 
+              onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))} 
+              variant="secondary" 
+              aria-label="Go to previous question"
+            >
+              Previous
+            </Button>
+            
+            {currentQuestionIndex < test.questions.length - 1 ? (
+              <Button 
+                onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))} 
+                variant="secondary" 
+                aria-label="Go to next question"
+              >
+                Next
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSubmitTest} 
+                variant="primary" 
+                aria-label="Submit test"
+              >
+                Submit Test
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="md:col-span-2 flex flex-col items-center w-full mt-6 md:mt-0">
+        
+        {/* Sidebar with palette and navigation */}
+        <div className="lg:col-span-2 flex flex-col items-center w-full mt-6 lg:mt-0">
+          {/* Legend */}
           <div className="mb-4 w-full max-w-xs">
-            <div className="flex flex-wrap gap-2 justify-center text-sm">
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-green-500"></span>Answered</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-purple-500"></span>Marked</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-gray-300 border"></span>Not Visited</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>Visited (no answer)</span>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2 text-center">Question Status</h3>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-green-500"></span>
+                <span>Answered</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-purple-500"></span>
+                <span>Marked</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-gray-300 border"></span>
+                <span>Not Visited</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>
+                <span>Visited (no answer)</span>
+              </div>
             </div>
           </div>
+          
+          {/* Question palette */}
           <div className="bg-white border rounded-lg p-4 shadow w-full max-w-xs overflow-x-auto">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 text-center">Question Navigator</h3>
             <div className="grid grid-cols-5 gap-2">
               {test.questions.map((q, index) => {
                 const cls = getPaletteClass(q, index);
                 const label = getQuestionKey(q, index);
+                
                 return (
                   <button
                     key={label}
@@ -517,6 +995,19 @@ const TestTaking = () => {
                   </button>
                 );
               })}
+            </div>
+          </div>
+          
+          {/* Progress summary */}
+          <div className="mt-4 w-full max-w-xs bg-gray-50 rounded-lg p-3">
+            <div className="text-center text-sm text-gray-600">
+              <div className="font-medium mb-1">Progress</div>
+              <div className="text-lg font-bold text-blue-600">
+                {answeredCount}/{totalQuestions}
+              </div>
+              <div className="text-xs text-gray-500">
+                {progressPercentage.toFixed(0)}% Complete
+              </div>
             </div>
           </div>
         </div>
