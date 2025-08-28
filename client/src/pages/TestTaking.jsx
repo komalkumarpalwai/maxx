@@ -489,20 +489,7 @@ const TestTaking = () => {
     const key = getQuestionKey(q, questionIndex);
     const isSingle = isSingleType(q);
     
-    setAnswers(prev => {
-      if (isSingle) {
-        // Single choice: store as a string (not array)
-        return { ...prev, [key]: option };
-      } else {
-        // Multiple choice: toggle option in array
-        const prevForQ = Array.isArray(prev[key]) ? prev[key] : [];
-        const exists = prevForQ.includes(option);
-        const updated = exists 
-          ? prevForQ.filter(o => o !== option) 
-          : [...prevForQ, option];
-        return { ...prev, [key]: updated };
-      }
-    });
+  setAnswers(prev => ({ ...prev, [key]: option }));
     
     // Mark as visited
     setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
@@ -866,28 +853,22 @@ const TestTaking = () => {
           <div className="space-y-3">
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
-              const isSingle = isSingleType(currentQ);
-              let selected;
-              if (isSingle) {
-                selected = answers[key] === opt;
-              } else {
-                selected = Array.isArray(answers[key]) && answers[key].includes(opt);
-              }
-              
+              // Always use radio buttons for all questions
+              const selected = answers[key] === opt;
               return (
                 <label 
                   key={i} 
                   className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  aria-label={`${isSingle ? 'Select' : 'Toggle'} option ${i + 1}`}
+                  aria-label={`Select option ${i + 1}`}
                 >
                   <input
-                    type={isSingle ? "radio" : "checkbox"}
-                    name={isSingle ? `question-${currentQuestionIndex}` : key} // Unique name per question for radio buttons
-                    value={opt} // Include value for proper form handling
-                    checked={!!selected}
+                    type="radio"
+                    name={`question-${currentQuestionIndex}`}
+                    value={opt}
+                    checked={selected}
                     onChange={() => handleAnswer(currentQuestionIndex, opt)}
                     className="mt-1"
-                    aria-label={`${isSingle ? 'Radio' : 'Checkbox'} option ${i + 1}`}
+                    aria-label={`Radio option ${i + 1}`}
                   />
                   <span className="text-base leading-relaxed">{opt}</span>
                 </label>
