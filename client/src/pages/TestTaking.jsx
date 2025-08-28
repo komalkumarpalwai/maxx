@@ -112,7 +112,7 @@ const TestTaking = () => {
     } catch (error) {
       console.error('Failed to restore test state:', error);
     }
-  }, [id, localStorageKey]);
+  }, [id, localStorageKey, timeLeft]);
 
   /**
    * Fetch test data and check if already attempted
@@ -485,7 +485,7 @@ const TestTaking = () => {
   if (!test?.questions?.[questionIndex]) return;
   const q = test.questions[questionIndex];
   const key = getQuestionKey(q, questionIndex);
-  setAnswers(prev => ({ ...prev, [key]: option }));
+  setAnswers(prev => ({ ...prev, [key]: option })); // Store the selected option index (number) instead of the option string
   // Mark as visited
   setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
   }, [test]);
@@ -495,12 +495,9 @@ const TestTaking = () => {
    */
   const handleMarkForReview = useCallback(() => {
     if (!test?.questions?.[currentQuestionIndex]) return;
-    
     const q = test.questions[currentQuestionIndex];
     const key = getQuestionKey(q, currentQuestionIndex);
-    
     setMarkForReview(prev => ({ ...prev, [key]: !prev[key] }));
-    
     // Auto-advance to next question if not at the end
     if (currentQuestionIndex < (test.questions?.length || 0) - 1) {
       setCurrentQuestionIndex(i => i + 1);
@@ -512,16 +509,13 @@ const TestTaking = () => {
    */
   const handleClearResponse = useCallback(() => {
     if (!test?.questions?.[currentQuestionIndex]) return;
-    
     const q = test.questions[currentQuestionIndex];
     const key = getQuestionKey(q, currentQuestionIndex);
-    
     setAnswers(prev => {
       const copy = { ...prev };
       delete copy[key];
       return copy;
     });
-    
     setMarkForReview(prev => ({ ...prev, [key]: false }));
   }, [currentQuestionIndex, test]);
 
@@ -574,7 +568,8 @@ const TestTaking = () => {
       // Transform answers to backend format: array of { selectedAnswer }
       const payloadAnswers = test.questions.map((q, idx) => {
         const key = getQuestionKey(q, idx);
-        return { selectedAnswer: answersRef.current[key] || null };
+    const ans = answersRef.current[key];
+    return { selectedAnswer: (typeof ans === 'number' ? ans : null) }; // Send index or null
       });
 
       await api.post(`/tests/${id}/submit`, { 
@@ -865,7 +860,7 @@ const TestTaking = () => {
           <div className="space-y-3">
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
-              const selected = answers[key] === opt;
+              const selected = answers[key] === i;
               return (
                 <label 
                   key={i} 
@@ -878,9 +873,9 @@ const TestTaking = () => {
                     id={`option-${currentQuestionIndex}-${i}`}
                     type="radio"
                     name={`question-${currentQuestionIndex}`}
-                    value={opt}
+                    value={i}
                     checked={selected}
-                    onChange={() => handleAnswer(currentQuestionIndex, opt)}
+                    onChange={() => handleAnswer(currentQuestionIndex, i)}
                     className="mt-1 focus:ring-2 focus:ring-blue-400"
                     aria-checked={selected}
                     aria-label={`Radio option ${i + 1}${selected ? ' (selected)' : ''}`}
