@@ -112,7 +112,7 @@ const TestTaking = () => {
     } catch (error) {
       console.error('Failed to restore test state:', error);
     }
-  }, [id, localStorageKey, timeLeft]);
+  }, [id, localStorageKey]);
 
   /**
    * Fetch test data and check if already attempted
@@ -177,7 +177,7 @@ const TestTaking = () => {
     return () => {
       cancelled = true;
     };
-  }, [id, timeLeft]);
+  }, [id]);
 
   /**
    * Persist test state to localStorage whenever it changes
@@ -333,8 +333,11 @@ const TestTaking = () => {
     
     const handleVisibility = () => {
       if (document.hidden) {
-        setViolations(v => v + 1);
-        toast.error(`⚠️ Tab switch detected! Violation ${Math.min(violations + 1, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+        setViolations(v => {
+          const newV = v + 1;
+          toast.error(`⚠️ Tab switch detected! Violation ${Math.min(newV, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+          return newV;
+        });
       }
     };
     
@@ -346,8 +349,11 @@ const TestTaking = () => {
       
       // Only count violation if exiting fullscreen
       if (wasFullscreen && !nowFullscreen) {
-        setViolations(v => v + 1);
-        toast.error(`⚠️ Fullscreen exit detected! Violation ${Math.min(violations + 1, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+        setViolations(v => {
+          const newV = v + 1;
+          toast.error(`⚠️ Fullscreen exit detected! Violation ${Math.min(newV, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+          return newV;
+        });
       }
     };
     
@@ -603,7 +609,7 @@ const TestTaking = () => {
     if (markForReview[key]) {
       return "bg-purple-500 text-white";
     }
-    if (answers[key]) {
+    if (answers[key] !== null && answers[key] !== undefined) {
       return "bg-green-500 text-white";
     }
     if (visited.has(key)) {
@@ -613,7 +619,7 @@ const TestTaking = () => {
   }, [currentQuestionIndex, markForReview, answers, visited]);
 
   // Calculate progress statistics
-  const answeredCount = Object.values(answers).filter(a => !!a).length;
+  const answeredCount = Object.values(answers).filter(a => a !== null && a !== undefined).length;
   
   const totalQuestions = test?.questions?.length || 0;
   const progressPercentage = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
