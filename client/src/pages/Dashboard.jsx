@@ -164,7 +164,9 @@ const Dashboard = () => {
                   <p className="text-sm text-gray-600 mb-2">{test.description || 'No description'}</p>
                   <div className="text-xs text-gray-500 mb-2">{test.category}</div>
                 </div>
-                <a href={`/tests/${test._id}`} className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded text-center" aria-label={`Take test: ${test.title}`}>Take Test</a>
+                <div className="mt-4 px-4 py-2 bg-blue-100 text-blue-800 rounded text-center text-sm">
+                  Go to Tests tab to take this test
+                </div>
               </div>
             ))}
           </div>

@@ -166,15 +166,17 @@ const TestTaking = () => {
         setError("Failed to load test.");
         setTest(null);
       } finally {
-        setLoading(false);
-        setAttemptCheckLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setAttemptCheckLoading(false);
+        }
       }
     })();
     
     return () => {
       cancelled = true;
     };
-  }, [id, timeLeft]);
+  }, [id]);
 
   /**
    * Persist test state to localStorage whenever it changes
@@ -489,7 +491,7 @@ const TestTaking = () => {
     
     setAnswers(prev => {
       if (isSingle) {
-        // Single choice: replace previous answer
+        // Single choice: replace previous answer (ensure only one option)
         return { ...prev, [key]: [option] };
       } else {
         // Multiple choice: toggle option
@@ -611,7 +613,8 @@ const TestTaking = () => {
       navigate("/tests");
     } catch (err) {
       console.error('Test submission failed:', err);
-      toast.error("Submission failed. Please try again.");
+      const errorMessage = err.response?.data?.message || err.message || "Submission failed. Please try again.";
+      toast.error(errorMessage);
       isSubmittingRef.current = false;
     }
   }, [test, answers, timeLeft, durationMinutes, id, navigate, localStorageKey]);
@@ -823,23 +826,6 @@ const TestTaking = () => {
               >
                 Resume Test
               </Button>
-              <Button 
-                onClick={() => { 
-                  localStorage.removeItem(localStorageKey); 
-                  setResumeAvailable(false); 
-                  setAnswers({}); 
-                  setVisited(new Set()); 
-                  setMarkForReview({}); 
-                  setAgreeInstructions(false); 
-                  if (durationMinutes) setTimeLeft(durationMinutes * 60); 
-                }} 
-                variant="secondary" 
-                size="lg" 
-                className="w-full"
-                aria-label="Start fresh test"
-              >
-                Start Fresh (clear saved)
-              </Button>
             </div>
           )}
         </div>
@@ -891,7 +877,7 @@ const TestTaking = () => {
                 >
                   <input
                     type={isSingle ? "radio" : "checkbox"}
-                    name={key} // Same name for radio buttons ensures exclusivity
+                    name={isSingle ? `question-${currentQuestionIndex}` : key} // Unique name per question for radio buttons
                     value={opt} // Include value for proper form handling
                     checked={!!selected}
                     onChange={() => handleAnswer(currentQuestionIndex, opt)}
