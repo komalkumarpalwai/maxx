@@ -469,11 +469,12 @@ const TestTaking = () => {
     } catch (error) {
       console.warn('Fullscreen request failed:', error);
     }
-    
+
+    // Only set timeLeft if not already set (should resume from saved value)
     if (timeLeft === null && durationMinutes) {
       setTimeLeft(durationMinutes * 60);
     }
-    
+
     setTestStarted(true);
     setResumeAvailable(false);
     warnedRef.current = false;

@@ -47,7 +47,7 @@ const testResultSchema = new mongoose.Schema({
       required: true
     },
     selectedAnswer: {
-      type: Number,
+      type: String,
       required: false // allow null/undefined if skipping is allowed
     },
     isCorrect: {
