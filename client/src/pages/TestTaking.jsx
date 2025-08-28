@@ -491,10 +491,10 @@ const TestTaking = () => {
     
     setAnswers(prev => {
       if (isSingle) {
-        // Single choice: replace previous answer (ensure only one option)
-        return { ...prev, [key]: [option] };
+        // Single choice: store as a string (not array)
+        return { ...prev, [key]: option };
       } else {
-        // Multiple choice: toggle option
+        // Multiple choice: toggle option in array
         const prevForQ = Array.isArray(prev[key]) ? prev[key] : [];
         const exists = prevForQ.includes(option);
         const updated = exists 
@@ -867,7 +867,12 @@ const TestTaking = () => {
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
               const isSingle = isSingleType(currentQ);
-              const selected = Array.isArray(answers[key]) && answers[key].includes(opt);
+              let selected;
+              if (isSingle) {
+                selected = answers[key] === opt;
+              } else {
+                selected = Array.isArray(answers[key]) && answers[key].includes(opt);
+              }
               
               return (
                 <label 
