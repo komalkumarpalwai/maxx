@@ -42,7 +42,7 @@ const TestTaking = () => {
   
   // Test attempt state
   const [alreadyAttempted, setAlreadyAttempted] = useState(false);
-  const [attemptCheckLoading, setAttemptCheckLoading] = useState(true);
+  const [attemptCheckLoading, setAttemptCheckLoading] = useState(false);
   
   // Test progress state
   const [answers, setAnswers] = useState({});
@@ -686,6 +686,7 @@ const TestTaking = () => {
 
   // Attempt check loading
   if (attemptCheckLoading) {
+    console.log('[TestTaking] Render: attemptCheckLoading is', attemptCheckLoading);
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="text-center">
