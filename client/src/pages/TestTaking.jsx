@@ -266,8 +266,14 @@ const TestTaking = () => {
           );
           const timeTaken = Math.ceil(usedSeconds / 60);
           
+          const payloadAnswers = (test?.questions || []).map((q, idx) => {
+            const key = getQuestionKey(q, idx);
+            const ans = answersRef.current[key];
+            const selected = Array.isArray(ans) && typeof ans[0] === 'number' ? ans[0] : null;
+            return { selectedAnswer: selected };
+          });
           await api.post(`/tests/${id}/submit`, {
-            answers: answersRef.current,
+            answers: payloadAnswers,
             timeTaken,
           });
           
@@ -332,8 +338,11 @@ const TestTaking = () => {
     
     const handleVisibility = () => {
       if (document.hidden) {
-        setViolations(v => v + 1);
-        toast.error(`⚠️ Tab switch detected! Violation ${Math.min(violations + 1, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+        setViolations(v => {
+          const next = v + 1;
+          toast.error(`⚠️ Tab switch detected! Violation ${Math.min(next, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+          return next;
+        });
       }
     };
     
@@ -345,8 +354,11 @@ const TestTaking = () => {
       
       // Only count violation if exiting fullscreen
       if (wasFullscreen && !nowFullscreen) {
-        setViolations(v => v + 1);
-        toast.error(`⚠️ Fullscreen exit detected! Violation ${Math.min(violations + 1, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+        setViolations(v => {
+          const next = v + 1;
+          toast.error(`⚠️ Fullscreen exit detected! Violation ${Math.min(next, VIOLATION_LIMIT)}/${VIOLATION_LIMIT}`);
+          return next;
+        });
       }
     };
     
@@ -390,8 +402,14 @@ const TestTaking = () => {
           );
           const timeTaken = Math.ceil(usedSeconds / 60);
           
+          const payloadAnswers = (test?.questions || []).map((q, idx) => {
+            const key = getQuestionKey(q, idx);
+            const ans = answersRef.current[key];
+            const selected = Array.isArray(ans) && typeof ans[0] === 'number' ? ans[0] : null;
+            return { selectedAnswer: selected };
+          });
           await api.post(`/tests/${id}/submit`, { 
-            answers: answersRef.current, 
+            answers: payloadAnswers, 
             timeTaken, 
             forced: true, 
             autoSubmitReason: "violation" 
@@ -406,7 +424,7 @@ const TestTaking = () => {
         }
       })();
     }
-  }, [violations, testStarted, id, durationMinutes, timeLeft, navigate, localStorageKey]);
+  }, [violations, testStarted, id, durationMinutes, timeLeft, navigate, localStorageKey, test]);
 
   /**
    * Redirect if test already attempted
@@ -488,9 +506,8 @@ const TestTaking = () => {
     
     const q = test.questions[questionIndex];
     const key = getQuestionKey(q, questionIndex);
-    const isSingle = isSingleType(q);
     
-  setAnswers(prev => ({ ...prev, [key]: option }));
+  setAnswers(prev => ({ ...prev, [key]: [option] }));
     
     // Mark as visited
     setVisited(prev => prev.has(key) ? prev : new Set(prev).add(key));
@@ -545,18 +562,19 @@ const TestTaking = () => {
   const handleSubmitTest = useCallback(async () => {
     if (isSubmittingRef.current) return;
     
-    // Check for unanswered questions
-    const unanswered = test.questions.filter((q, idx) => {
-      const key = getQuestionKey(q, idx);
-      return !Array.isArray(answers[key]) || answers[key].length === 0;
-    });
-    
-    if (unanswered.length > 0) {
-      toast.error(
-        `Please answer all questions before submitting. (${unanswered.length} unanswered)`,
-        { duration: 4000 }
-      );
-      return;
+    // Check for unanswered questions only if required
+    if (test?.requireAllQuestions) {
+      const unanswered = test.questions.filter((q, idx) => {
+        const key = getQuestionKey(q, idx);
+        return !Array.isArray(answers[key]) || answers[key].length === 0;
+      });
+      if (unanswered.length > 0) {
+        toast.error(
+          `Please answer all questions before submitting. (${unanswered.length} unanswered)`,
+          { duration: 4000 }
+        );
+        return;
+      }
     }
     
     // Confirm submission
@@ -579,16 +597,8 @@ const TestTaking = () => {
       const payloadAnswers = test.questions.map((q, idx) => {
         const key = getQuestionKey(q, idx);
         const ans = answersRef.current[key];
-        
-        if (isSingleType(q)) {
-          return { 
-            selectedAnswer: Array.isArray(ans) && ans.length > 0 ? ans[0] : null 
-          };
-        } else {
-          return { 
-            selectedAnswer: Array.isArray(ans) ? ans : [] 
-          };
-        }
+        const selected = Array.isArray(ans) && typeof ans[0] === 'number' ? ans[0] : null;
+        return { selectedAnswer: selected };
       });
       
       await api.post(`/tests/${id}/submit`, { 
@@ -855,7 +865,7 @@ const TestTaking = () => {
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
               // Always use radio buttons for all questions
-              const selected = answers[key] === opt;
+              const selected = Array.isArray(answers[key]) && answers[key][0] === i;
               return (
                 <label 
                   key={i} 
@@ -865,9 +875,9 @@ const TestTaking = () => {
                   <input
                     type="radio"
                     name={`question-${currentQuestionIndex}`}
-                    value={opt}
+                    value={i}
                     checked={selected}
-                    onChange={() => handleAnswer(currentQuestionIndex, opt)}
+                    onChange={() => handleAnswer(currentQuestionIndex, i)}
                     className="mt-1"
                     aria-label={`Radio option ${i + 1}`}
                   />
