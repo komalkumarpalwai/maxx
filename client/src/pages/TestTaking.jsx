@@ -117,6 +117,7 @@ const TestTaking = () => {
   /**
    * Fetch test data and check if already attempted
    */
+
   useEffect(() => {
     let cancelled = false;
 
@@ -173,7 +174,7 @@ const TestTaking = () => {
     return () => {
       cancelled = true;
     };
-  }, [id, timeLeft]);
+  }, [id]);
 
   /**
    * Persist test state to localStorage whenever it changes
