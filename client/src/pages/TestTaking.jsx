@@ -375,11 +375,21 @@ const TestTaking = () => {
       const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
       const usedSeconds = Math.max(0, totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0));
       const timeTaken = Math.ceil(usedSeconds / 60);
-      await api.post(`/tests/${id}/submit`, { answers: answersRef.current, timeTaken });
+      // Transform answers to match backend expectations: array of { selectedAnswer }
+      const payloadAnswers = test.questions.map((q, idx) => {
+        const key = getQuestionKey(q, idx);
+        const ans = answersRef.current[key];
+        if (isSingleType(q)) {
+          return { selectedAnswer: Array.isArray(ans) && ans.length > 0 ? ans[0] : null };
+        } else {
+          return { selectedAnswer: Array.isArray(ans) ? ans : [] };
+        }
+      });
+      await api.post(`/tests/${id}/submit`, { answers: payloadAnswers, timeTaken });
       localStorage.removeItem(localStorageKey);
       toast.success("Test submitted successfully");
       navigate("/tests");
-    } catch {
+    } catch (err) {
       toast.error("Submission failed");
       isSubmittingRef.current = false;
     }
@@ -452,24 +462,22 @@ const TestTaking = () => {
   }
   // Test in progress
   return (
-    <div className="max-w-5xl mx-auto p-4" aria-label="Test Taking Page">
-      <div className="grid grid-cols-5 gap-6">
-        <div className="col-span-3 space-y-4">
-          <div className="flex items-center justify-between mb-4"><span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">{test.title}</span><span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">{formatTime(timeLeft)}</span></div>
+    <div className="max-w-5xl mx-auto p-2 md:p-4" aria-label="Test Taking Page">
+      <div className="flex flex-col md:grid md:grid-cols-5 gap-4 md:gap-6">
+        <div className="md:col-span-3 space-y-4 w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
+            <span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">{test.title}</span>
+            <span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">{formatTime(timeLeft)}</span>
+          </div>
           <div className="mb-2 text-gray-600 text-sm">Question {currentQuestionIndex + 1} of {test.questions.length}</div>
           <div className="text-lg font-medium mb-2">{currentQ ? (currentQ.question || currentQ.text || currentQ.questionText) : "Question not available"}</div>
           <div className="space-y-2">
             {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
               const key = getQuestionKey(currentQ, currentQuestionIndex);
               const isSingle = isSingleType(currentQ);
-              if (process.env.NODE_ENV !== 'production') {
-                // Debug: log type detection
-                // eslint-disable-next-line no-console
-                console.log(`Q${currentQuestionIndex + 1} type:`, currentQ.type, 'isSingle:', isSingle, 'options:', currentQ.options);
-              }
               const selected = Array.isArray(answers[key]) && answers[key].includes(opt);
               return (
-                <label key={i} className="block cursor-pointer">
+                <label key={i} className="block cursor-pointer text-base md:text-base">
                   <input
                     type={isSingle ? "radio" : "checkbox"}
                     name={key}
@@ -482,11 +490,38 @@ const TestTaking = () => {
               );
             })}
           </div>
-          <div className="flex gap-2 mt-6 flex-wrap"><Button onClick={handleMarkForReview} variant={markForReview[currentKey] ? "primary" : "secondary"}>{markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}</Button><Button onClick={handleClearResponse} variant="secondary" aria-label="Clear Response">Clear Response</Button><Button disabled={currentQuestionIndex === 0} onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))} variant="secondary" aria-label="Previous Question">Previous</Button>{currentQuestionIndex < test.questions.length - 1 ? (<Button onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))} variant="secondary" aria-label="Next Question">Next</Button>) : (<Button onClick={handleSubmitTest} variant="primary" aria-label="Submit Test">Submit</Button>)}</div>
+          <div className="flex flex-wrap gap-2 mt-6"><Button onClick={handleMarkForReview} variant={markForReview[currentKey] ? "primary" : "secondary"}>{markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}</Button><Button onClick={handleClearResponse} variant="secondary" aria-label="Clear Response">Clear Response</Button><Button disabled={currentQuestionIndex === 0} onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))} variant="secondary" aria-label="Previous Question">Previous</Button>{currentQuestionIndex < test.questions.length - 1 ? (<Button onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))} variant="secondary" aria-label="Next Question">Next</Button>) : (<Button onClick={handleSubmitTest} variant="primary" aria-label="Submit Test">Submit</Button>)}</div>
         </div>
-        <div className="col-span-2 flex flex-col items-center"><div className="mb-4 w-full max-w-xs"><div className="flex flex-wrap gap-2 justify-center text-sm"><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-green-500"></span>Answered</span><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-purple-500"></span>Marked</span><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-gray-300 border"></span>Not Visited</span><span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>Visited (no answer)</span></div></div><div className="bg-white border rounded-lg p-4 shadow w-full max-w-xs"><div className="grid grid-cols-5 gap-2">{test.questions.map((q, index) => { const cls = getPaletteClass(q, index); const label = getQuestionKey(q, index); return (<button key={label} className={`w-8 h-8 rounded-full font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors duration-200 ${cls}`} aria-label={`Go to question ${index + 1}`} onClick={() => handleGoToQuestion(index)}>{index + 1}</button>); })}</div></div></div></div>
+        <div className="md:col-span-2 flex flex-col items-center w-full mt-6 md:mt-0">
+          <div className="mb-4 w-full max-w-xs">
+            <div className="flex flex-wrap gap-2 justify-center text-sm">
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-green-500"></span>Answered</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-purple-500"></span>Marked</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-gray-300 border"></span>Not Visited</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>Visited (no answer)</span>
+            </div>
+          </div>
+          <div className="bg-white border rounded-lg p-4 shadow w-full max-w-xs overflow-x-auto">
+            <div className="grid grid-cols-5 gap-2">
+              {test.questions.map((q, index) => {
+                const cls = getPaletteClass(q, index);
+                const label = getQuestionKey(q, index);
+                return (
+                  <button
+                    key={label}
+                    className={`w-8 h-8 rounded-full font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors duration-200 ${cls}`}
+                    aria-label={`Go to question ${index + 1}`}
+                    onClick={() => handleGoToQuestion(index)}
+                  >
+                    {index + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
-   
+    </div>
   );
 };
 
