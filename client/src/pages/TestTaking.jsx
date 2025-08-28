@@ -156,7 +156,10 @@ const TestTaking = () => {
             null;
           setDurationMinutes(dur);
           durationRef.current = dur;
-          if (timeLeft === null && dur !== null) setTimeLeft(dur * 60);
+          // Always set timeLeft if not a valid number
+          if (typeof timeLeft !== 'number' || isNaN(timeLeft) || timeLeft <= 0) {
+            if (dur !== null) setTimeLeft(dur * 60);
+          }
         }
       } catch (err) {
         console.error('[TestTaking] Failed to load test:', err);
@@ -174,7 +177,7 @@ const TestTaking = () => {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, timeLeft]);
 
   /**
    * Persist test state to localStorage whenever it changes
