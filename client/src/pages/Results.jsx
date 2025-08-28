@@ -32,9 +32,11 @@ const Results = () => {
 
   const fetchResults = async () => {
     try {
+      console.log('[Results] Fetching results...');
       setError('');
       setLoading(true);
       const res = await api.get('/tests/results/student');
+      console.log('[Results] API response:', res);
       if (res.data?.success) {
         const allResults = res.data.results || [];
         // Sort by completedAt desc
@@ -51,11 +53,14 @@ const Results = () => {
         }
         setTests(uniqueTests);
       } else {
+        console.error('[Results] API returned no success:', res.data);
         setError('Failed to load results');
       }
     } catch (e) {
+      console.error('[Results] API error:', e);
       setError('Failed to load results');
     } finally {
+      console.log('[Results] Setting loading to false');
       setLoading(false);
     }
   };
