@@ -64,7 +64,7 @@ export const checkSuspiciousAccess = () => {
 export const initializeSecurity = () => {
   if (typeof window !== 'undefined') {
     // Add event listeners for security
-    document.addEventListener('contextmenu', preventContextMenu);
+    // document.addEventListener('contextmenu', preventContextMenu); // Disabled to allow right-click
     document.addEventListener('keydown', preventDevTools);
     
     // Add security headers

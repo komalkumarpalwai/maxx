@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Home, User, FileText, BarChart3, Settings, GraduationCap, Info } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 
@@ -19,20 +19,14 @@ const Sidebar = () => {
       description: 'Overview and statistics'
     },
     {
-      label: 'Profile',
-      icon: User,
-      path: '/profile',
-      description: 'Manage your profile'
-    },
-    {
       label: 'Tests',
       icon: FileText,
       path: '/tests',
-      description: 'Available tests'
+      description: 'Take and manage tests'
     },
     {
       label: 'Results',
-      icon: BarChart3,
+      icon: FileText,
       path: '/results',
       description: 'Your test results'
     },
@@ -41,6 +35,18 @@ const Sidebar = () => {
       icon: GraduationCap,
       path: '/academic',
       description: 'Academic information'
+    },
+    {
+      label: 'Coding',
+      icon: FileText,
+      path: '/coding',
+      description: 'Practice coding problems'
+    },
+    {
+      label: 'Profile',
+      icon: User,
+      path: '/profile',
+      description: 'Manage your profile'
     },
     {
       label: 'Settings',
@@ -95,7 +101,7 @@ const Sidebar = () => {
             <span className="text-white font-bold text-xl">M</span>
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Max Solutions</h2>
+            <Link to="/" className="text-lg font-semibold text-gray-900 hover:text-blue-700 transition-colors">Max Solutions</Link>
             <p className="text-sm text-gray-500">Engineering Excellence</p>
           </div>
         </div>
@@ -119,7 +125,12 @@ const Sidebar = () => {
                     }`} 
                   />
                   <div className="flex-1">
-                    <div className="font-medium">{item.label}</div>
+                    <div className="font-medium flex items-center">
+                      {item.label}
+                      {(item.label === 'Coding' || item.label === 'Academic') && (
+                        <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-400 text-yellow-900 rounded font-bold">Beta</span>
+                      )}
+                    </div>
                     <div className={`text-xs ${
                       isActive(item.path) ? 'text-blue-500' : 'text-gray-400'
                     }`}>

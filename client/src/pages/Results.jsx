@@ -135,9 +135,6 @@ const Results = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Your Results</h1>
           <p className="text-gray-600">View your scores and performance across tests.</p>
-          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-400 text-yellow-800 rounded text-sm">
-            <b>Note:</b> Please use the <b>Reload</b> button below to refresh this page. Do <b>not</b> use your browser or device reload button, or you may lose your session or data.
-          </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportAll} className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded border">Download All CSV</button>
@@ -228,6 +225,60 @@ const Results = () => {
                       <div className="text-sm font-bold text-gray-900">{new Date(userResult.completedAt).toLocaleString()}</div>
                     </div>
                   </div>
+                  {/* Show all questions with user's answer and correct answer highlighted */}
+                  {userResult.answers && userResult.test?.questions && (
+                    <div className="mt-8">
+                      <h3 className="text-lg font-bold text-blue-700 mb-4">Your Answers for Each Question</h3>
+                      <div className="space-y-4">
+                        {userResult.answers.map((a, idx) => {
+                          const q = userResult.test.questions[a.questionIndex];
+                          const isCorrect = a.isCorrect;
+                          const userAnswered = typeof a.selectedAnswer === 'number';
+                          return (
+                            <div key={idx} className={`bg-white rounded shadow p-4 border-l-4 ${isCorrect ? 'border-green-500' : 'border-red-500'}`}>
+                              <div className="font-semibold text-gray-800 mb-2">Q{a.questionIndex + 1}: {q.question}</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                {q.options.map((opt, i) => {
+                                  const isUser = userAnswered && a.selectedAnswer === i;
+                                  const isAns = q.correctAnswer === i;
+                                  let highlightClass = '';
+                                  // Always show both highlights if user answer and correct answer overlap
+                                  if (isUser && isAns) {
+                                    highlightClass = 'border-2 border-green-600 bg-green-100 font-bold text-green-800 relative';
+                                  } else if (isUser) {
+                                    highlightClass = 'border-2 border-blue-600 bg-blue-100 font-bold text-blue-800 relative';
+                                  } else if (isAns) {
+                                    highlightClass = 'border-2 border-green-600 bg-green-50 text-green-700 relative';
+                                  } else {
+                                    highlightClass = 'border border-gray-300';
+                                  }
+                                  return (
+                                    <div key={i} className={`px-3 py-2 rounded flex items-center gap-2 ${highlightClass}`}> 
+                                      {/* Always show both icons if overlap */}
+                                      {isUser && <span className="inline-block w-2 h-2 rounded-full bg-blue-600 mr-2" title="Your Answer"></span>}
+                                      {isAns && <span className="inline-block w-2 h-2 rounded-full bg-green-600 mr-2" title="Correct Answer"></span>}
+                                      <span>{opt}</span>
+                                      {/* Always show both labels if overlap */}
+                                      {isUser && !isAns && <span className="ml-auto text-xs text-blue-700">Your Answer</span>}
+                                      {isAns && !isUser && <span className="ml-auto text-xs text-green-700">Correct</span>}
+                                      {isUser && isAns && <span className="ml-auto text-xs text-green-700">Your Answer & Correct</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {!userAnswered && <div className="text-red-700 font-semibold">Not Answered</div>}
+                              {!isCorrect && userAnswered && (
+                                <div className="text-red-700 font-semibold">Incorrect</div>
+                              )}
+                              {isCorrect && userAnswered && (
+                                <div className="text-green-700 font-semibold">Correct</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <a
                     href={`/tests/${selectedTest}/attempts`}
                     className="inline-block mt-5 px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition"

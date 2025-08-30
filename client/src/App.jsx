@@ -6,7 +6,9 @@ import { UserProvider } from './context/UserContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
+import Footer from './components/Footer';
 import Login from './pages/Login';
+import Coding from './pages/Coding';
 import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +23,11 @@ import { initializeSecurity } from './utils/security';
 import './index.css';
 import Academic from './pages/Academic';
 import Settings from './pages/Settings';
+import Partner from './pages/Partner';
+import About from './pages/About';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import Terms from './pages/Terms';
+import Copyright from './pages/Copyright';
 
 function App() {
   useEffect(() => {
@@ -45,6 +52,26 @@ function App() {
             />
 
             <Routes>
+              {/* All main and public routes use a shared layout with Footer */}
+              <Route path="/coding" element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Coding /></main>
+                      </div>
+                    </div>
+                    <Footer />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/partner" element={<div className="flex flex-col min-h-screen"><Navbar /><main className="p-6 flex-1"><Partner /></main><Footer /></div>} />
+              <Route path="/about" element={<div className="flex flex-col min-h-screen"><Navbar /><main className="p-6 flex-1"><About /></main><Footer /></div>} />
+              <Route path="/privacy" element={<div className="flex flex-col min-h-screen"><Navbar /><main className="p-6 flex-1"><PrivacyPolicy /></main><Footer /></div>} />
+              <Route path="/terms" element={<div className="flex flex-col min-h-screen"><Navbar /><main className="p-6 flex-1"><Terms /></main><Footer /></div>} />
+              <Route path="/copyright" element={<div className="flex flex-col min-h-screen"><Navbar /><main className="p-6 flex-1"><Copyright /></main><Footer /></div>} />
               {/* Public routes */}
               <Route path="/login" element={
                 <ProtectedRoute requireAuth={false}>
@@ -60,48 +87,60 @@ function App() {
               {/* Protected routes */}
               <Route path="/" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><Dashboard /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Dashboard /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
 
               <Route path="/profile" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><Profile /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Profile /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
 
               <Route path="/tests" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><Tests /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Tests /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
 
               <Route path="/tests/:id" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><TestTaking /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><TestTaking /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
@@ -109,48 +148,60 @@ function App() {
 
               <Route path="/results" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><Results /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Results /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
 
               <Route path="/tests/:id/attempts" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><TestAttempts /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><TestAttempts /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
 
               <Route path="/academic" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><Academic /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Academic /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />
 
               <Route path="/settings" element={
                 <ProtectedRoute>
-                  <div className="flex">
-                    <Sidebar />
-                    <div className="flex-1">
-                      <Navbar />
-                      <main className="p-6"><Settings /></main>
+                  <div className="flex min-h-screen flex-col">
+                    <div className="flex flex-1">
+                      <Sidebar />
+                      <div className="flex-1 flex flex-col">
+                        <Navbar />
+                        <main className="p-6 flex-1"><Settings /></main>
+                      </div>
                     </div>
+                    <Footer />
                   </div>
                 </ProtectedRoute>
               } />

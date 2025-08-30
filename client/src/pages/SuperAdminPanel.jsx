@@ -26,6 +26,9 @@ const SuperAdminPanel = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editId, setEditId] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
   useEffect(() => {
     fetchAdmins();
@@ -49,18 +52,27 @@ const SuperAdminPanel = () => {
     setLoading(true);
     setError('');
     setSuccess('');
+    // Email format validation
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(form.email)) {
+      setError('Please enter a valid email address.');
+      setLoading(false);
+      return;
+    }
+    // Password strength validation
+    if (!editId) {
+      const pw = form.password;
+      if (!pw || pw.length < 8 || !/[A-Z]/.test(pw) || !/[a-z]/.test(pw) || !/\d/.test(pw) || !/[!@#$%^&*(),.?":{}|<>]/.test(pw)) {
+        setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+        setLoading(false);
+        return;
+      }
+    }
     try {
       if (editId) {
-        // Only allow editing non-password fields for now
-        await api.put(`/profile/${editId}`, { ...form, password: undefined });
-        setSuccess('Admin updated successfully!');
+        setShowUpdateDialog(true);
+        return;
       } else {
-        // Require password for new admin/faculty
-        if (!form.password || form.password.length < 8) {
-          setError('Password is required and must be at least 8 characters.');
-          setLoading(false);
-          return;
-        }
         await api.post('/profile/users', form);
         setSuccess('Admin/Faculty created successfully!');
       }
@@ -88,19 +100,8 @@ const SuperAdminPanel = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this admin?')) return;
-    setLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      await api.delete(`/users/admin/${id}`);
-      setSuccess('Admin deleted successfully!');
-      fetchAdmins();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete admin');
-    } finally {
-      setLoading(false);
-    }
+  setShowDeleteDialog(true);
+  setDeleteId(id);
   };
 
   if (!user || user.role !== 'superadmin') {
@@ -109,6 +110,62 @@ const SuperAdminPanel = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold mb-4 text-red-600">Confirm Delete</h3>
+            <p className="mb-4">Are you sure you want to delete this admin?</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowDeleteDialog(false); setDeleteId(null); }}>Cancel</Button>
+              <Button variant="danger" onClick={async () => {
+                setLoading(true);
+                setError('');
+                setSuccess('');
+                try {
+                  await api.delete(`/users/admin/${deleteId}`);
+                  setSuccess('Admin deleted successfully!');
+                  fetchAdmins();
+                } catch (err) {
+                  setError(err.response?.data?.message || 'Failed to delete admin');
+                } finally {
+                  setLoading(false);
+                  setShowDeleteDialog(false);
+                  setDeleteId(null);
+                }
+              }}>Delete</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Update Confirmation Dialog */}
+      {showUpdateDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold mb-4 text-blue-600">Confirm Update</h3>
+            <p className="mb-4">Are you sure you want to update this admin's details?</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowUpdateDialog(false); }}>Cancel</Button>
+              <Button variant="primary" onClick={async () => {
+                setLoading(true);
+                setError('');
+                setSuccess('');
+                try {
+                  await api.put(`/profile/${editId}`, { ...form, password: undefined });
+                  setSuccess('Admin updated successfully!');
+                  fetchAdmins();
+                } catch (err) {
+                  setError(err.response?.data?.message || 'Failed to update admin');
+                } finally {
+                  setLoading(false);
+                  setShowUpdateDialog(false);
+                  setEditId(null);
+                }
+              }}>Update</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <h1 className="text-2xl font-bold mb-6 text-center">Superadmin: Admin Management</h1>
       <form className="bg-white rounded shadow p-6 mb-8" onSubmit={handleCreateOrUpdate}>
         <h2 className="text-lg font-semibold mb-4">Create New Admin/Faculty</h2>

@@ -29,47 +29,14 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Special case: hardcoded admin
-    if (decoded.userId === 'admin' && decoded.role === 'admin') {
-      req.user = {
-        _id: 'admin',
-        id: 'admin',
-        name: 'Default Admin',
-        email: 'komalp@gmail.com',
-        rollNo: 'ADMIN001',
-        college: 'Ace Engineering College',
-        year: '',
-        branch: '',
-        profilePic: '/default-avatar.png',
-        role: 'admin',
-        isActive: true,
-        profileUpdateCount: 0,
-        passwordHint: 'Contact developer for admin password',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      return next();
-    }
-    // Special case: hardcoded superadmin
-    if (decoded.userId === 'superadmin' && decoded.role === 'superadmin') {
-      req.user = {
-        _id: 'superadmin',
-        id: 'superadmin',
-        name: 'Super Admin',
-        email: 'superadmin@example.com',
-        rollNo: 'SUPERADMIN001',
-        college: 'Ace Engineering College',
-        year: '',
-        branch: '',
-        profilePic: '/default-avatar.png',
-        role: 'superadmin',
-        isActive: true,
-        profileUpdateCount: 0,
-        passwordHint: 'Contact developer for superadmin password',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      return next();
+  // Removed all hardcoded admin and superadmin logic
+    // Accept database superadmin user
+    if (decoded.role === 'superadmin') {
+      const user = await User.findById(decoded.userId).select('-password');
+      if (user && user.role === 'superadmin' && user.isActive) {
+        req.user = user;
+        return next();
+      }
     }
 
     // Find user and check if active
@@ -99,7 +66,14 @@ const auth = async (req, res, next) => {
 
 
 const isAdmin = (req, res, next) => {
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')) {
+  console.log('isAdmin middleware:', {
+    user: req.user,
+    role: req.user?.role,
+    token: req.header('Authorization'),
+    userId: req.user?._id,
+    isActive: req.user?.isActive
+  });
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'faculty')) {
     next();
   } else {
     res.status(403).json({ message: 'Access denied. Admin or Superadmin role required.' });

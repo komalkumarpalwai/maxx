@@ -21,30 +21,16 @@ const sidebarItems = [
   { key: 'results', label: 'Exam Results' },
   { key: 'analytics', label: 'Test Analytics' },
   { key: 'feedback', label: 'Feedback' },
-  { key: 'auditLogs', label: 'Audit Logs' },
 ];
 
 
 const AdminPanel = () => {
+  // Filter for deactivated users
+  const [showDeactivatedOnly, setShowDeactivatedOnly] = useState(false);
 
   const { user, logout } = useAuth();
   const [section, setSection] = useState('create');
-  // Audit logs state
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditError, setAuditError] = useState('');
 
-  // Fetch audit logs when section is selected
-  useEffect(() => {
-    if (section === 'auditLogs') {
-      setAuditLoading(true);
-      setAuditError('');
-      api.get('/audit-logs?limit=30')
-        .then(res => setAuditLogs(res.data.logs || []))
-        .catch(() => setAuditError('Failed to fetch audit logs'))
-        .finally(() => setAuditLoading(false));
-    }
-  }, [section]);
   const [pwOld, setPwOld] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
@@ -61,7 +47,7 @@ const AdminPanel = () => {
   // User details modal state
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // ...existing code...
+
 
   // Pagination logic (moved below for bulk actions)
 
@@ -134,11 +120,14 @@ const AdminPanel = () => {
   const recentUsers = users.slice(0, 5);
 
   // Search/filter users
-  const filteredUsers = users.filter(u =>
+  let filteredUsers = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.rollNo.toLowerCase().includes(search.toLowerCase())
   );
+  if (showDeactivatedOnly) {
+    filteredUsers = filteredUsers.filter(u => !u.isActive);
+  }
 
   // Pagination logic
   const totalPages = Math.ceil(filteredUsers.length / pageSize);
@@ -228,6 +217,16 @@ const AdminPanel = () => {
         {section === 'users' && (
           <div>
             <h2 className="text-xl font-semibold mb-4">User Activity</h2>
+            <div className="flex items-center mb-2 gap-4">
+              <input
+                type="checkbox"
+                id="showDeactivatedOnly"
+                checked={showDeactivatedOnly}
+                onChange={e => setShowDeactivatedOnly(e.target.checked)}
+                className="mr-2"
+              />
+              <label htmlFor="showDeactivatedOnly" className="text-sm">Show only deactivated accounts</label>
+            </div>
             <input
               type="text"
               className="border rounded px-3 py-2 mb-4 w-full max-w-xs"
@@ -278,16 +277,17 @@ const AdminPanel = () => {
                       {paginatedUsers.map((user, idx) => {
                         const userResults = results.filter(r => r.student && (r.student._id === user._id || r.student === user._id));
                         const lastActivity = userResults.length > 0 ? new Date(userResults[0].createdAt).toLocaleString() : '—';
+                        const rowClass = user.isActive ? "cursor-pointer hover:bg-blue-50 focus-within:bg-blue-100" : "cursor-pointer bg-red-50 text-gray-500 hover:bg-red-100 focus-within:bg-red-100";
                         return (
-                          <tr key={user._id} className="cursor-pointer hover:bg-blue-50 focus-within:bg-blue-100" tabIndex={0} aria-label={`User ${user.name}`} onKeyDown={e => {if(e.key==='Enter'){setSelectedUser(user);}}} role="row">
+                          <tr key={user._id} className={rowClass} tabIndex={0} aria-label={`User ${user.name}`} onKeyDown={e => {if(e.key==='Enter'){setSelectedUser(user);}}} role="row">
                             <td className="border px-2 py-1 text-center">
                               <input type="checkbox" aria-label={`Select user ${user.name}`} checked={selectedUserIds.includes(user._id)} onChange={() => handleSelectUser(user._id)} tabIndex={0} />
                             </td>
-                            <td className="border px-2 py-1" tabIndex={0}>{user.name}</td>
+                            <td className="border px-2 py-1" tabIndex={0}>{user.name} {!user.isActive && <span className="ml-1 px-2 py-1 bg-red-200 text-red-800 rounded text-xs">Deactivated</span>}</td>
                             <td className="border px-2 py-1" tabIndex={0}>{user.email}</td>
                             <td className="border px-2 py-1" tabIndex={0}>{user.rollNo}</td>
                             <td className="border px-2 py-1" tabIndex={0}>{user.branch || '—'}</td>
-                            <td className="border px-2 py-1" tabIndex={0}>{user.isActive ? 'Yes' : 'No'}</td>
+                            <td className="border px-2 py-1" tabIndex={0}>{user.isActive ? 'Yes' : <span className="text-red-600 font-bold">No</span>}</td>
                             <td className="border px-2 py-1" tabIndex={0}>{userResults.length}</td>
                             <td className="border px-2 py-1" tabIndex={0}>{lastActivity}</td>
                           </tr>
@@ -438,52 +438,7 @@ const AdminPanel = () => {
             </form>
           </div>
         )}
-        {section === 'auditLogs' && (
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Audit Logs</h2>
-            {auditLoading ? (
-              <div className="flex items-center justify-center py-8" role="status" aria-live="polite">
-                <svg className="animate-spin h-8 w-8 text-blue-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                </svg>
-                <span>Loading audit logs...</span>
-              </div>
-            ) : auditError ? (
-              <div className="bg-yellow-100 text-yellow-800 p-4 rounded mb-4">
-                <p className="font-semibold">Audit log feature will be released for Admin and Faculty soon.</p>
-                <p className="text-xs">(Technical: {auditError})</p>
-              </div>
-            ) : auditLogs.length === 0 ? (
-              <div className="text-gray-500 text-center py-8">No audit logs found.</div>
-            ) : (
-              <div className="overflow-x-auto w-full">
-                <table className="min-w-full border text-xs md:text-sm">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border px-2 py-1">Action</th>
-                      <th className="border px-2 py-1">Performed By</th>
-                      <th className="border px-2 py-1">Role</th>
-                      <th className="border px-2 py-1">Details</th>
-                      <th className="border px-2 py-1">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLogs.map(log => (
-                      <tr key={log._id}>
-                        <td className="border px-2 py-1">{log.action}</td>
-                        <td className="border px-2 py-1">{log.performedBy ? `${log.performedBy.name} (${log.performedBy.email})` : '—'}</td>
-                        <td className="border px-2 py-1">{log.performedBy ? log.performedBy.role : '—'}</td>
-                        <td className="border px-2 py-1 text-xs">{log.details ? JSON.stringify(log.details) : '—'}</td>
-                        <td className="border px-2 py-1">{new Date(log.createdAt).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+ 
       </main>
     </div>
   );

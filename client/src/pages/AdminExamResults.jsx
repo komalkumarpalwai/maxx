@@ -72,11 +72,7 @@ const AdminExamResults = () => {
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Result of Exams</h1>
-      <div className="mb-4 p-2 bg-yellow-50 border border-yellow-400 text-yellow-800 rounded text-sm">
-        <b>Note:</b> Please use the <b>Reload</b> button below to refresh this page. Do <b>not</b> use your browser or device reload button, or you may lose your session or data.
-      </div>
       <div className="mb-4 flex flex-wrap gap-4 items-center">
-        <button onClick={() => window.location.reload()} className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded">Reload</button>
         <select
           className="border rounded px-3 py-2"
           value={selectedExam}

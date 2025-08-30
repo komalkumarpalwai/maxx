@@ -32,6 +32,9 @@ function formatTime(sec) {
 }
 
 const TestTaking = () => {
+  // Handlers to disable right-click, copy, paste
+  const disableContextMenu = e => e.preventDefault();
+  const disableCopyPaste = e => e.preventDefault();
   const { id } = useParams();
   const navigate = useNavigate();
   
@@ -74,6 +77,11 @@ const TestTaking = () => {
 
   // Keep refs in sync with state
   useEffect(() => {
+  // Disable right-click, copy, paste
+  document.addEventListener('contextmenu', disableContextMenu);
+  document.addEventListener('copy', disableCopyPaste);
+  document.addEventListener('paste', disableCopyPaste);
+
     answersRef.current = answers;
   }, [answers]);
   
@@ -175,9 +183,11 @@ const TestTaking = () => {
     })();
 
     return () => {
-      cancelled = true;
+      document.removeEventListener('contextmenu', disableContextMenu);
+      document.removeEventListener('copy', disableCopyPaste);
+      document.removeEventListener('paste', disableCopyPaste);
     };
-  }, [id]);
+  }, [id, timeLeft]);
 
   /**
    * Persist test state to localStorage whenever it changes
@@ -248,52 +258,49 @@ const TestTaking = () => {
   ]);
 
   /**
+   * Restore test state from localStorage on component mount
+   */
+  useEffect(() => {
+    const raw = localStorage.getItem(localStorageKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      setAnswers(parsed.answers || {});
+      setCurrentQuestionIndex(
+        Number.isInteger(parsed.currentQuestionIndex)
+          ? parsed.currentQuestionIndex
+          : 0
+      );
+      setVisited(
+        Array.isArray(parsed.visited) ? new Set(parsed.visited) : new Set()
+      );
+      setMarkForReview(parsed.markForReview || {});
+      setTimeLeft(
+        typeof parsed.timeLeft === "number" ? parsed.timeLeft : null
+      );
+      setTestStarted(parsed.testStarted || false);
+      setResumeAvailable(
+        parsed.testStarted ||
+          Object.keys(parsed.answers || {}).length > 0 ||
+          parsed.timeLeft !== null
+      );
+    } catch (error) {
+      console.error('Failed to restore test state:', error);
+    }
+  }, [id, localStorageKey]);
+
+  /**
    * Main timer logic with auto-submission
    */
   useEffect(() => {
-    if (!testStarted || timeLeft === null) return;
-    
-    if (timeLeft <= 0) {
-      if (isSubmittingRef.current) return;
-      
-      (async () => {
-        isSubmittingRef.current = true;
-        
-        try {
-          const totalSeconds = (durationRef.current || durationMinutes || 0) * 60;
-          const usedSeconds = Math.max(
-            0,
-            totalSeconds - (typeof timeLeft === "number" ? timeLeft : 0)
-          );
-          const timeTaken = Math.ceil(usedSeconds / 60);
-          
-          await api.post(`/tests/${id}/submit`, {
-            answers: answersRef.current,
-            timeTaken,
-          });
-          
-          localStorage.removeItem(localStorageKey);
-          toast.success("⏰ Test auto-submitted (time up)");
-          navigate("/tests");
-        } catch (error) {
-          console.error('Auto submission failed:', error);
-          toast.error("Auto submission failed");
-        }
-      })();
-      
-      return;
+    let timerId;
+    if (testStarted && timeLeft !== null) {
+      timerId = setInterval(() => {
+        setTimeLeft(prev => typeof prev === "number" ? Math.max(0, prev - 1) : prev);
+      }, 1000);
     }
-    
-    const timerId = setInterval(
-      () =>
-        setTimeLeft((prev) =>
-          typeof prev === "number" ? Math.max(0, prev - 1) : prev
-        ),
-      1000
-    );
-    
     return () => clearInterval(timerId);
-  }, [testStarted, timeLeft, id, durationMinutes, navigate, localStorageKey]);
+  }, [testStarted, timeLeft]);
 
   /**
    * Show 2-minute warning toast
@@ -363,16 +370,25 @@ const TestTaking = () => {
     document.addEventListener("webkitfullscreenchange", handleFullscreen);
     document.addEventListener("mozfullscreenchange", handleFullscreen);
     document.addEventListener("MSFullscreenChange", handleFullscreen);
-    
+
     // Set initial fullscreen state
     setIsFullscreen(isDocFullscreen());
-    
+
+    // Resume test if user returns from another tab
+    const handleTabResume = () => {
+      if (document.visibilityState === "visible") {
+        setTestStarted(true); // Resume test, do not reset state
+      }
+    };
+    document.addEventListener("visibilitychange", handleTabResume);
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       document.removeEventListener("fullscreenchange", handleFullscreen);
       document.removeEventListener("webkitfullscreenchange", handleFullscreen);
       document.removeEventListener("mozfullscreenchange", handleFullscreen);
       document.removeEventListener("MSFullscreenChange", handleFullscreen);
+      document.removeEventListener("visibilitychange", handleTabResume);
     };
   }, [testStarted, isFullscreen, violations]);
 
@@ -543,13 +559,13 @@ const TestTaking = () => {
     if (isSubmittingRef.current) return;
     
 
-    // Check for unanswered questions
+    // Check for unanswered questions (fix: treat 0 as answered)
     const unanswered = test.questions.filter((q, idx) => {
       const key = getQuestionKey(q, idx);
-      return !answers[key];
+      return answers[key] === undefined || answers[key] === null;
     });
 
-    if (unanswered.length > 0) {
+    if (test.requireAllQuestions && unanswered.length > 0) {
       toast.error(
         `Please answer all questions before submitting. (${unanswered.length} unanswered)`,
         { duration: 4000 }
@@ -829,120 +845,125 @@ const TestTaking = () => {
   const currentKey = currentQ ? getQuestionKey(currentQ, currentQuestionIndex) : null;
 
   return (
-    <div className="max-w-6xl mx-auto p-2 md:p-4 lg:p-6" aria-label="Test Taking Page">
-      {/* Reload warning and button */}
-      <div className="mb-4 p-2 bg-yellow-50 border border-yellow-400 text-yellow-800 rounded text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <span>
-          <b>Note:</b> Please use the <b>Reload</b> button below to refresh this page. Do <b>not</b> use your browser or device reload button, or you may lose your session or data.
-        </span>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded"
-        >
-          Reload
-        </button>
+  <div className="max-w-6xl mx-auto p-2 md:p-4 lg:p-6" aria-label="Test Taking Page">
+    {/* Resume test button if available and not started */}
+    {!testStarted && resumeAvailable && (
+      <div className="mb-4 p-4 bg-yellow-50 border border-yellow-400 rounded text-center">
+        <p className="text-yellow-700 font-semibold mb-2">You have an unfinished test attempt. Would you like to resume?</p>
+        <Button onClick={() => setTestStarted(true)} variant="primary">Resume Test</Button>
       </div>
-      <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 md:gap-6">
-        {/* Main test area */}
-        <div className="lg:col-span-3 space-y-4 w-full">
-          {/* Header with title and timer */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
-            <span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">
-              {test.title}
-            </span>
-            <span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">
-              {formatTime(timeLeft)}
-            </span>
-          </div>
-          
-          {/* Question counter */}
-          <div className="mb-2 text-gray-600 text-sm">
-            Question {currentQuestionIndex + 1} of {test.questions.length}
-          </div>
-          
-          {/* Question text */}
-          <div className="text-lg font-medium mb-4">
-            {currentQ ? (currentQ.question || currentQ.text || currentQ.questionText) : "Question not available"}
-          </div>
-          
-          {/* Answer options */}
-          <div className="space-y-3">
-            {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
-              const key = getQuestionKey(currentQ, currentQuestionIndex);
-              const selected = answers[key] === i;
-              return (
-                <label 
-                  key={i} 
-                  className={`flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors ${selected ? 'bg-blue-50 border-blue-400' : ''}`}
-                  aria-label={`Select option ${i + 1}${selected ? ' (selected)' : ''}`}
-                  tabIndex={0}
-                  htmlFor={`option-${currentQuestionIndex}-${i}`}
-                >
-                  <input
-                    id={`option-${currentQuestionIndex}-${i}`}
-                    type="radio"
-                    name={`question-${currentQuestionIndex}`}
-                    value={i}
-                    checked={selected}
-                    onChange={() => handleAnswer(currentQuestionIndex, i)}
-                    className="mt-1 focus:ring-2 focus:ring-blue-400"
-                    aria-checked={selected}
-                    aria-label={`Radio option ${i + 1}${selected ? ' (selected)' : ''}`}
-                  />
-                  <span className="text-base leading-relaxed">{opt}</span>
-                </label>
-              );
-            })}
-          </div>
-          
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-2 mt-6">
-            <Button 
-              onClick={handleMarkForReview} 
-              variant={markForReview[currentKey] ? "primary" : "secondary"}
-              aria-label={markForReview[currentKey] ? "Unmark for review" : "Mark for review and next"}
-            >
-              {markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}
-            </Button>
-            
-            <Button 
-              onClick={handleClearResponse} 
-              variant="secondary" 
-              aria-label="Clear response for current question"
-            >
-              Clear Response
-            </Button>
-            
-            <Button 
-              disabled={currentQuestionIndex === 0} 
-              onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))} 
-              variant="secondary" 
-              aria-label="Go to previous question"
-            >
-              Previous
-            </Button>
-            
-            {currentQuestionIndex < test.questions.length - 1 ? (
-              <Button 
-                onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))} 
-                variant="secondary" 
-                aria-label="Go to next question"
-              >
-                Next
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleSubmitTest} 
-                variant="primary" 
-                aria-label="Submit test"
-              >
-                Submit Test
-              </Button>
-            )}
-          </div>
+    )}
+    {/* If not fullscreen during test, show only submit and enter fullscreen buttons */}
+    {testStarted && !isFullscreen && (
+      <div className="mb-4 p-4 bg-red-50 border border-red-400 rounded text-center flex flex-col items-center gap-3">
+        <p className="text-red-700 font-semibold mb-2">You must be in fullscreen to write the test.</p>
+        <div className="flex gap-4">
+          <Button onClick={handleSubmitTest} variant="primary">Submit Test</Button>
+          <Button onClick={() => document.documentElement.requestFullscreen()} variant="secondary">Enter Fullscreen to Write Test</Button>
         </div>
-        
-        {/* Sidebar with palette and navigation */}
+      </div>
+    )}
+    <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 md:gap-6">
+      {/* Main test area */}
+      <div className="lg:col-span-3 space-y-4 w-full">
+        {/* Header with title and timer */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
+          <span className="text-lg font-bold text-green-700 bg-green-100 px-3 py-1 rounded">
+            {test.title}
+          </span>
+          <span className="text-lg font-mono text-blue-700 bg-blue-100 px-3 py-1 rounded">
+            {formatTime(timeLeft)}
+          </span>
+        </div>
+        {/* Question counter */}
+        <div className="mb-2 text-gray-600 text-sm">
+          Question {currentQuestionIndex + 1} of {test.questions.length}
+        </div>
+        {/* Question text */}
+        <div className="text-lg font-medium mb-4">
+          {currentQ ? (currentQ.question || currentQ.text || currentQ.questionText) : "Question not available"}
+        </div>
+        {/* Answer options (disabled if not fullscreen) */}
+        <div className="space-y-3">
+          {currentQ && currentQ.options && currentQ.options.map((opt, i) => {
+            const key = getQuestionKey(currentQ, currentQuestionIndex);
+            const selected = answers[key] === i;
+            return (
+              <label
+                key={i}
+                className={`flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors ${selected ? 'bg-blue-50 border-blue-400' : ''}`}
+                aria-label={`Select option ${i + 1}${selected ? ' (selected)' : ''}`}
+                tabIndex={0}
+                htmlFor={`option-${currentQuestionIndex}-${i}`}
+              >
+                <input
+                  id={`option-${currentQuestionIndex}-${i}`}
+                  type="radio"
+                  name={`question-${currentQuestionIndex}`}
+                  value={i}
+                  checked={selected}
+                  onChange={isFullscreen ? () => handleAnswer(currentQuestionIndex, i) : undefined}
+                  className="mt-1 focus:ring-2 focus:ring-blue-400"
+                  aria-checked={selected}
+                  aria-label={`Radio option ${i + 1}${selected ? ' (selected)' : ''}`}
+                  disabled={!isFullscreen}
+                />
+                <span className="text-base leading-relaxed">{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2 mt-6">
+          <Button
+            onClick={handleMarkForReview}
+            variant={markForReview[currentKey] ? "primary" : "secondary"}
+            aria-label={markForReview[currentKey] ? "Unmark for review" : "Mark for review and next"}
+            disabled={!isFullscreen}
+          >
+            {markForReview[currentKey] ? "Unmark Review" : "Mark for Review & Next"}
+          </Button>
+          <Button
+            onClick={handleClearResponse}
+            variant="secondary"
+            aria-label="Clear response for current question"
+            disabled={!isFullscreen}
+          >
+            Clear Response
+          </Button>
+          <Button
+            disabled={currentQuestionIndex === 0 || !isFullscreen}
+            onClick={() => setCurrentQuestionIndex(i => Math.max(0, i - 1))}
+            variant="secondary"
+            aria-label="Go to previous question"
+          >
+            Previous
+          </Button>
+          {/* Show submit button from first question if requireAllQuestions is false, else only on last question */}
+          {(!test.requireAllQuestions || currentQuestionIndex === test.questions.length - 1) && (
+            <Button
+              onClick={handleSubmitTest}
+              variant="primary"
+              aria-label="Submit test"
+            >
+              Submit Test
+            </Button>
+          )}
+          {currentQuestionIndex < test.questions.length - 1 && (
+            <Button
+              onClick={() => setCurrentQuestionIndex(i => Math.min(test.questions.length - 1, i + 1))}
+              variant="secondary"
+              aria-label="Go to next question"
+              disabled={!isFullscreen}
+            >
+              Next
+            </Button>
+          )}
+        </div>
+      </div>
+      {/* Sidebar with palette and navigation (disable navigation if in fullscreen) */}
+      {/* Sidebar and navigation only if not in fullscreen and not writing test */}
+      {(!testStarted || isFullscreen) && (
         <div className="lg:col-span-2 flex flex-col items-center w-full mt-6 lg:mt-0">
           {/* Legend */}
           <div className="mb-4 w-full max-w-xs">
@@ -966,7 +987,6 @@ const TestTaking = () => {
               </div>
             </div>
           </div>
-          
           {/* Question palette */}
           <div className="bg-white border rounded-lg p-4 shadow w-full max-w-xs overflow-x-auto">
             <h3 className="text-sm font-semibold text-gray-700 mb-3 text-center">Question Navigator</h3>
@@ -974,13 +994,13 @@ const TestTaking = () => {
               {test.questions.map((q, index) => {
                 const cls = getPaletteClass(q, index);
                 const label = getQuestionKey(q, index);
-                
                 return (
                   <button
                     key={label}
                     className={`w-8 h-8 rounded-full font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors duration-200 ${cls}`}
                     aria-label={`Go to question ${index + 1}`}
-                    onClick={() => handleGoToQuestion(index)}
+                    onClick={isFullscreen ? () => handleGoToQuestion(index) : undefined}
+                    disabled={!isFullscreen}
                   >
                     {index + 1}
                   </button>
@@ -988,7 +1008,6 @@ const TestTaking = () => {
               })}
             </div>
           </div>
-          
           {/* Progress summary */}
           <div className="mt-4 w-full max-w-xs bg-gray-50 rounded-lg p-3">
             <div className="text-center text-sm text-gray-600">
@@ -1002,8 +1021,9 @@ const TestTaking = () => {
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
+  </div>
   );
 };
 

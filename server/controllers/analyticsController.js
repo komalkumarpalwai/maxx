@@ -11,7 +11,7 @@ const getTestAnalytics = async (req, res) => {
     const test = await Test.findById(testId);
     if (!test) return res.status(404).json({ success: false, message: 'Test not found' });
     
-    const results = await TestResult.find({ test: testId }).populate('user', 'name email');
+  const results = await TestResult.find({ test: testId }).populate('student', 'name email');
     if (!results.length) return res.json({ success: true, analytics: null, message: 'No attempts yet' });
     
     const scores = results.map(r => r.score);
@@ -31,7 +31,7 @@ const getTestAnalytics = async (req, res) => {
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
       .slice(0, 10)
       .map(result => ({
-        studentName: result.user?.name || 'Anonymous',
+        studentName: result.student?.name || 'Anonymous',
         score: result.percentage,
         submittedAt: result.submittedAt
       }));

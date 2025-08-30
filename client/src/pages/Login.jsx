@@ -16,6 +16,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [loginHint, setLoginHint] = useState('');
+  const [loginError, setLoginError] = useState('');
   
   // Debug: Show current API URL
   const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
@@ -45,7 +46,8 @@ const Login = () => {
     e.preventDefault();
     if (!validateForm()) return;
     setLoading(true);
-    setLoginHint(''); // Clear previous hints
+  setLoginHint(''); // Clear previous hints
+  setLoginError(''); // Clear previous errors
     try {
       const result = await login(formData.email, formData.password, false);
       if (result.success) {
@@ -61,11 +63,13 @@ const Login = () => {
           setLoginHint(result.hint);
           toast.error(result.hint);
         } else {
+          setLoginError(result.error || 'Login failed');
           toast.error(result.error || 'Login failed');
         }
       }
     } catch (error) {
-      toast.error('An error occurred during login');
+      setLoginError(error?.message || 'An error occurred during login');
+      toast.error(error?.message || 'An error occurred during login');
     } finally {
       setLoading(false);
     }
@@ -120,6 +124,18 @@ const Login = () => {
                 <div className="text-sm text-blue-800">
                   <p className="font-medium">Login Hint:</p>
                   <p>{loginHint}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Login Error */}
+          {loginError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-800">
+                  <p className="font-medium">Login Error:</p>
+                  <p>{loginError}</p>
                 </div>
               </div>
             </div>

@@ -413,6 +413,13 @@ router.delete('/:id', auth, isAdmin, async (req, res) => {
 // @access  Private
 router.post('/:id/submit', auth, async (req, res) => {
   try {
+    // Debug log: print received answers
+    console.log('Test submission received:', {
+      user: req.user?._id,
+      testId: req.params.id,
+      answers: req.body.answers,
+      timeTaken: req.body.timeTaken
+    });
     // Prevent admin user from submitting tests
     if (req.user._id === 'admin') {
       return res.status(403).json({
