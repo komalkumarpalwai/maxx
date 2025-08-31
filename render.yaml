@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: maxx-2   # 👈 your Render service name
+    name: maxx-2
     env: static
-    rootDir: client   # 👈 important since your app lives in client/
+    rootDir: client
     buildCommand: npm ci && npm run build
     staticPublishPath: ./build
     routes:
