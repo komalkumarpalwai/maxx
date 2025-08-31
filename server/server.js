@@ -3,23 +3,34 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const helmet = require('helmet');
 
 // Import routes
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const testRoutes = require('./routes/tests');
 const logoutRoutes = require('./routes/logout');
+const leaderboardRoutes = require('./routes/leaderboard');
+const userRoutes = require('./routes/users');
+const auditLogsRoutes = require('./routes/auditLogs');
+const metaRoutes = require('./routes/meta');
+const feedbackRoutes = require('./routes/feedback');
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT =process.env.PORT || 5001;
+const PORT = process.env.PORT || 5001;
 
 // Middleware
+app.use(helmet()); // Security headers
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true
+  origin: process.env.CLIENT_URL || 'https://maxx-2.netlify.app',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -43,11 +54,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/auth', logoutRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/tests', testRoutes);
-app.use('/api/tests', require('./routes/leaderboard'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/audit-logs', require('./routes/auditLogs'));
-app.use('/api/meta', require('./routes/meta'));
-app.use('/api/feedback', require('./routes/feedback'));
+app.use('/api/tests', leaderboardRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/audit-logs', auditLogsRoutes);
+app.use('/api/meta', metaRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -67,13 +78,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-
 // Serve React app for all non-API, non-static routes (for client-side routing)
 if (process.env.NODE_ENV === 'production') {
   const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
   app.use(express.static(clientBuildPath));
   app.get('*', (req, res) => {
-    // If the request does not start with /api or /uploads, serve index.html
     if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
       res.sendFile(path.join(clientBuildPath, 'index.html'));
     } else {
@@ -81,25 +90,21 @@ if (process.env.NODE_ENV === 'production') {
     }
   });
 } else {
-  // 404 handler for development
   app.use('*', (req, res) => {
     res.status(404).json({ message: 'Route not found' });
   });
 }
 
-
 // Create default admin if none exists
 const User = require('./models/User');
 const Test = require('./models/Test');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 
 async function createDefaultAdmin() {
   try {
     const adminExists = await User.findOne({ role: 'admin', email: 'komalp@gmail.com' });
     if (!adminExists) {
       const email = 'komalp@gmail.com';
-      const password = 'loveukomal69696';
+      const password = process.env.ADMIN_PASSWORD || 'defaultPassword';
       const hashedPassword = await bcrypt.hash(password, 10);
       const admin = new User({
         name: 'Default Admin',
@@ -108,35 +113,27 @@ async function createDefaultAdmin() {
         password: hashedPassword,
         passwordHint: 'Contact developer for admin password',
         college: 'Ace Engineering College',
-        year: '',
-        branch: '',
         role: 'admin',
         isActive: true
       });
       await admin.save();
-      console.log('🔑 Default admin created:');
-      console.log('   Email:', email);
-      console.log('   Password:', password);
+      console.log('🔑 Default admin created');
     }
   } catch (err) {
     console.error('❌ Error creating default admin:', err.message);
   }
 }
 
-
-// Backfill testCode for existing tests (bulk update to avoid validation error)
+// Backfill testCode for existing tests
 async function backfillTestCodes() {
   try {
-    const tests = await Test.find({ $or: [ { testCode: { $exists: false } }, { testCode: null }, { testCode: '' } ] });
-    let count = 0;
-    for (const test of tests) {
-      const code = crypto.randomBytes(4).toString('hex');
-      await Test.updateOne({ _id: test._id }, { $set: { testCode: code } });
-      count++;
-      console.log(`Backfilled testCode for test: ${test.title} (${test._id})`);
-    }
-    if (count > 0) {
-      console.log(`✅ Backfilled testCode for ${count} test(s)`);
+    const tests = await Test.find({ $or: [{ testCode: { $exists: false } }, { testCode: null }, { testCode: '' }] });
+    if (tests.length > 0) {
+      await Promise.all(tests.map(test => {
+        const code = crypto.randomBytes(4).toString('hex');
+        return Test.updateOne({ _id: test._id }, { $set: { testCode: code } });
+      }));
+      console.log(`✅ Backfilled testCode for ${tests.length} test(s)`);
     }
   } catch (err) {
     console.error('❌ Error backfilling test codes:', err.message);
@@ -145,7 +142,7 @@ async function backfillTestCodes() {
 
 app.listen(PORT, async () => {
   console.log(`🚀 Max Solutions Server running on port ${PORT}`);
-  console.log(`📱 Client URL: ${process.env.CLIENT_URL || 'http://localhost:3000'}`);
+  console.log(`📱 Client URL: ${process.env.CLIENT_URL || 'https://maxx-2.netlify.app'}`);
   await createDefaultAdmin();
   await backfillTestCodes();
 });

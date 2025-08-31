@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+// Use Render backend URL, fallback to localhost in dev
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || 'https://maxx-server.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,7 +11,7 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// ✅ Request interceptor: attach JWT if available
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -18,12 +20,10 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle errors
+// ✅ Response interceptor: handle unauthorized
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,11 +36,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-
-
-
-
-
-
-
-
