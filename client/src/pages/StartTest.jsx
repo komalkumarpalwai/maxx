@@ -711,11 +711,11 @@ const StartTest = () => {
 
         {/* Footer */}
         <div className="w-full max-w-5xl mx-auto mt-4 mb-2 text-xs text-gray-500 text-center flex flex-col gap-1">
-          <div>Maxx Assessment © 2021-2031</div>
+          <div>Maxx Assessment © 2025-2031</div>
           <div className="flex items-center justify-center gap-2">
             <span>Need Help? Contact us:</span>
-            <span className="text-black">+1 (800) 265-6038</span>
-            <span className="text-black">+91 80471-89190</span>
+            <span className="text-black">+91 8309897937</span>
+            <span className="text-black">+91 9908776278</span>
           </div>
           <div>
             Powered by <span className="font-bold text-black">Maxx</span>
