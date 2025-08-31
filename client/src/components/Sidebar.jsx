@@ -7,7 +7,6 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useUser();
-
   // Calculate remaining profile updates
   const remainingUpdates = user ? 2 - (user.profileUpdateCount || 0) : 2;
 
@@ -89,7 +88,7 @@ const Sidebar = () => {
   }, []);
 
   const handleNav = (path, disabled) => {
-    if (disabled) return;
+  if (disabled) return;
     navigate(path);
   };
 
@@ -117,7 +116,7 @@ const Sidebar = () => {
                     isActive(item.path) ? 'nav-link-active' : 'nav-link-inactive'
                   } ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                   disabled={disabled}
-                  title={disabled ? 'Disabled in fullscreen exam' : undefined}
+                  title={disabled ? 'Navigation disabled during test' : undefined}
                 >
                   <item.icon 
                     className={`w-5 h-5 ${

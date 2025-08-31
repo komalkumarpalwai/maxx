@@ -3,7 +3,6 @@ const router = express.Router();
 const { auth, isAdmin } = require('../middlewares/auth');
 const Test = require('../models/Test');
 const TestResult = require('../models/TestResult');
-
 // @desc    Update a single question in a test (admin only)
 // @route   PUT /api/tests/:id/questions/update
 // @access  Private (Admin)
@@ -40,6 +39,7 @@ router.put('/:id/questions/update', auth, isAdmin, async (req, res) => {
     console.error('Update question error:', error);
     res.status(500).json({ success: false, message: 'Failed to update question', error: error.message });
   }
+  
 });
 const { getTestAnalytics } = require('../controllers/analyticsController');
 const { upload, uploadQuestionsCSV } = require('../controllers/csvController');
@@ -102,10 +102,14 @@ router.get('/', async (req, res) => {
     res.json({
       success: true,
       count: tests.length,
-      tests: tests.map(test => ({
-        ...test.toObject(),
-        status: test.getStatus()
-      }))
+      tests: tests.map(test => {
+        const obj = test.toObject();
+        return {
+          ...obj,
+          status: test.getStatus(),
+          passingScore: typeof obj.passingScore === 'number' && !isNaN(obj.passingScore) ? obj.passingScore : 40
+        };
+      })
     });
   } catch (error) {
     console.error('Get tests error:', error);
@@ -144,16 +148,18 @@ router.get('/:id', auth, async (req, res) => {
 
 
 
-    // Remove correct answers for students, but include requireAllQuestions and allowNavigation
+    // Remove correct answers for students, but include requireAllQuestions, allowNavigation, and passingScore
+    const obj = test.toObject();
     const testForStudent = {
-      ...test.toObject(),
+      ...obj,
       questions: test.questions.map(q => ({
         question: q.question,
         options: q.options,
         points: q.points
       })),
       requireAllQuestions: test.requireAllQuestions,
-      allowNavigation: test.allowNavigation
+      allowNavigation: test.allowNavigation,
+      passingScore: typeof obj.passingScore === 'number' && !isNaN(obj.passingScore) ? obj.passingScore : 40
     };
 
     res.json({
@@ -189,10 +195,16 @@ router.post('/', auth, isAdmin, async (req, res) => {
       tabSwitchLimit,
       deviceRestriction,
       allowedBranches,
-      allowedYears
+      allowedYears,
+      passingScore
     } = req.body;
     if (!title || !category) {
       return res.status(400).json({ success: false, message: 'Title and category are required' });
+    }
+    // Check for duplicate title (case-insensitive)
+    const existingTest = await Test.findOne({ title: { $regex: `^${title}$`, $options: 'i' } });
+    if (existingTest) {
+      return res.status(400).json({ success: false, message: 'A test with this title already exists. Please choose a different name.' });
     }
     const test = new Test({
       title,
@@ -204,7 +216,8 @@ router.post('/', auth, isAdmin, async (req, res) => {
       tabSwitchLimit,
       deviceRestriction,
       allowedBranches,
-      allowedYears
+      allowedYears,
+      passingScore: typeof passingScore === 'number' && !isNaN(passingScore) ? passingScore : 40
     });
     await test.save();
     res.status(201).json({
@@ -435,7 +448,6 @@ router.post('/:id/submit', auth, async (req, res) => {
         message: 'You have already attempted this test.'
       });
     }
-  let { answers, timeTaken } = req.body;
     const test = await Test.findById(req.params.id);
     if (!test) {
       return res.status(404).json({ 
@@ -443,9 +455,18 @@ router.post('/:id/submit', auth, async (req, res) => {
         message: 'Test not found' 
       });
     }
+    let { answers, timeTaken } = req.body;
+    // Convert answers object to array if needed (for forced/violation submits)
+    if (answers && !Array.isArray(answers)) {
+      answers = test.questions.map((q, idx) => {
+        const key = q?._id ? String(q._id) : `q-${idx}`;
+        const ans = answers[key];
+        return { selectedAnswer: typeof ans === 'number' ? ans : null };
+      });
+    }
 
-    // Enforce required answers if requireAllQuestions is true
-    if (test.requireAllQuestions) {
+    // Enforce required answers if requireAllQuestions is true and not a forced/violation submit
+    if (test.requireAllQuestions && !req.body.forced) {
       if (!answers || answers.length !== test.questions.length || answers.some(a => a.selectedAnswer === undefined || a.selectedAnswer === null)) {
         return res.status(400).json({
           success: false,
@@ -485,8 +506,8 @@ router.post('/:id/submit', auth, async (req, res) => {
     const processedAnswers = test.questions.map((question, index) => {
       const answer = answers && answers[index] ? answers[index] : {};
       const selectedAnswer = (answer.selectedAnswer !== undefined && answer.selectedAnswer !== null) ? answer.selectedAnswer : null;
-  // Ensure both are numbers for comparison
-  const isCorrect = selectedAnswer !== null && Number(selectedAnswer) === Number(question.correctAnswer);
+      // Ensure both are numbers for comparison
+      const isCorrect = selectedAnswer !== null && Number(selectedAnswer) === Number(question.correctAnswer);
       const points = isCorrect ? question.points : 0;
       if (selectedAnswer !== null) score += points;
       return {
@@ -497,8 +518,8 @@ router.post('/:id/submit', auth, async (req, res) => {
       };
     });
     const totalScore = test.questions.reduce((sum, q) => sum + q.points, 0);
-    const percentage = Math.round((score / totalScore) * 100);
-    const passed = percentage >= test.passingScore;
+    const percentage = totalScore > 0 ? Math.round((score / totalScore) * 100) : 0;
+    const passed = typeof test.passingScore === 'number' ? percentage >= test.passingScore : percentage >= 40;
     const testResult = new TestResult({
       student: req.user._id,
       test: test._id,

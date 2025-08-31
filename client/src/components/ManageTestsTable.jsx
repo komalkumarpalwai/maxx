@@ -32,7 +32,7 @@ function ViewQuestionsModal({ questions, testId, testTitle, onClose, fetchQuesti
       <div className="bg-white p-6 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col overflow-y-auto border border-gray-200">
         <h3 className="font-semibold text-lg mb-4">Questions for: <span className="text-blue-700">{testTitle}</span></h3>
         {questions.length === 0 ? (
-          <div className="text-gray-500">No questions found for this test.</div>
+          <div className="text-gray-500">No questions found for this test. Please ensure that the duration is set correctly.</div>
         ) : (
           <ol className="list-decimal ml-5 space-y-3">
             {questions.map((q, idx) => (
@@ -278,6 +278,84 @@ function AddQuestionsModal({ closeQModal, handleAddQuestions, loading }) {
 
 function ManageTestsTable() {
   const [viewQModal, setViewQModal] = useState({ open: false, questions: [], testTitle: '' });
+  // Bulk selection state
+  const [selectedTests, setSelectedTests] = useState([]);
+  // ...existing code...
+
+  // ...existing code...
+  const [tests, setTests] = useState([]);
+  const allSelected = tests.length > 0 && selectedTests.length === tests.length;
+  const handleSelectTest = (testId) => {
+    setSelectedTests((prev) =>
+      prev.includes(testId) ? prev.filter((id) => id !== testId) : [...prev, testId]
+    );
+  };
+  const handleSelectAll = () => {
+    if (allSelected) setSelectedTests([]);
+    else setSelectedTests(tests.map((t) => t._id));
+  };
+
+  // Bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedTests.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedTests.length} selected test(s)? This action cannot be undone.`)) return;
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      for (const id of selectedTests) {
+        await api.delete(`/tests/${id}`);
+      }
+      setSuccess('Selected tests deleted!');
+      setSelectedTests([]);
+      fetchTests();
+    } catch (err) {
+      setError('Bulk delete failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Bulk start (activate)
+  const handleBulkStart = () => {
+    if (selectedTests.length === 0) return;
+    if (!window.confirm(`Are you sure you want to start ${selectedTests.length} selected test(s)?`)) return;
+    // Open window modal for all selected tests (one by one)
+    setBulkStartQueue([...selectedTests]);
+    setBulkStartModal({ open: true, testId: selectedTests[0], idx: 0, start: '', end: '', duration: '' });
+  };
+  // Bulk start modal state
+  const [bulkStartModal, setBulkStartModal] = useState({ open: false, testId: null, idx: 0, start: '', end: '', duration: '' });
+  const [bulkStartQueue, setBulkStartQueue] = useState([]);
+  const handleBulkStartNext = async () => {
+    const { testId, start, end, duration, idx } = bulkStartModal;
+    setLoading(true); setError('');
+    try {
+      const mins = parseInt(duration, 10);
+      if (!start || !end || isNaN(mins) || mins < 1) {
+        setError('Please fill all fields for this test.');
+        setLoading(false);
+        return;
+      }
+      await api.put(`/tests/${testId}/activate`, { startDate: start, endDate: end, duration: mins });
+      // Move to next
+      if (idx + 1 < bulkStartQueue.length) {
+        setBulkStartModal({ open: true, testId: bulkStartQueue[idx + 1], idx: idx + 1, start: '', end: '', duration: '' });
+      } else {
+        setBulkStartModal({ open: false, testId: null, idx: 0, start: '', end: '', duration: '' });
+        setBulkStartQueue([]);
+        setSuccess('Selected tests started!');
+        setSelectedTests([]);
+        fetchTests();
+      }
+    } catch (err) {
+      setError('Failed to start test');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleBulkStartCancel = () => {
+    setBulkStartModal({ open: false, testId: null, idx: 0, start: '', end: '', duration: '' });
+    setBulkStartQueue([]);
+  };
 
   const openViewQModal = async (test) => {
     setLoading(true); setError('');
@@ -291,7 +369,7 @@ function ManageTestsTable() {
     }
   };
   const closeViewQModal = () => setViewQModal({ open: false, questions: [], testTitle: '' });
-  const [tests, setTests] = useState([]);
+  // ...existing code...
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -465,10 +543,21 @@ const [showGuide, setShowGuide] = useState(true);
       {error && <div className="text-red-600">{error}</div>}
       {success && <div className="text-green-600">{success}</div>}
 
+
+      {/* Bulk Actions Bar */}
+      <div className="flex gap-2 mb-2">
+        <button className="px-3 py-1 bg-red-600 text-white rounded disabled:opacity-50" onClick={handleBulkDelete} disabled={selectedTests.length === 0}>Bulk Delete</button>
+        <button className="px-3 py-1 bg-green-600 text-white rounded disabled:opacity-50" onClick={handleBulkStart} disabled={selectedTests.length === 0}>Bulk Start</button>
+        <span className="text-xs text-gray-500">{selectedTests.length} selected</span>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full border text-sm" aria-label="All tests table">
           <thead>
             <tr className="bg-gray-100">
+              <th className="border px-2 py-1">
+                <input type="checkbox" checked={allSelected} onChange={handleSelectAll} aria-label="Select all tests" />
+              </th>
               <th className="border px-2 py-1">Title</th>
               <th className="border px-2 py-1">Questions</th>
               <th className="border px-2 py-1">Category</th>
@@ -480,13 +569,16 @@ const [showGuide, setShowGuide] = useState(true);
           <tbody>
             {tests.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center text-gray-500 py-8">No tests found. Please create a test in the Create Test tab.</td>
+                <td colSpan={7} className="text-center text-gray-500 py-8">No tests found. Please create a test in the Create Test tab.</td>
               </tr>
             ) : (
               tests.map(test => {
                 const questionCount = Array.isArray(test.questions) ? test.questions.length : (test.totalQuestions || 0);
                 return (
                   <tr key={test._id} tabIndex={0} aria-label={test.title}>
+                    <td className="border px-2 py-1 text-center">
+                      <input type="checkbox" checked={selectedTests.includes(test._id)} onChange={() => handleSelectTest(test._id)} aria-label={`Select test ${test.title}`} />
+                    </td>
                     <td className="border px-2 py-1">
                       <div className="font-semibold">{test.title}</div>
                     </td>
@@ -509,7 +601,7 @@ const [showGuide, setShowGuide] = useState(true);
     <button className="px-2 py-1 bg-blue-600 text-white rounded text-xs" onClick={() => openEditModal(test)} aria-label={`Edit settings for ${test.title}`}>Edit</button>
     {test.isActive ? (
       <button className="px-2 py-1 bg-red-600 text-white rounded text-xs" onClick={() => {
-        if (window.confirm(`Are you sure you want to stop the test "${test.title}"?`)) handleDeactivate(test._id);
+  if (window.confirm(`Are you sure you want to stop the test "${test.title}"?`)) handleDeactivate(test._id);
       }} aria-label={`Stop test ${test.title}`}>Stop</button>
     ) : (
       <button className={`px-2 py-1 rounded text-xs ${questionCount === 0 ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-600 text-white'}`}
@@ -533,6 +625,37 @@ const [showGuide, setShowGuide] = useState(true);
           </tbody>
         </table>
       </div>
+
+      {/* Bulk Start Modal (step through each selected test) */}
+      {bulkStartModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+            <h3 className="font-semibold mb-2">Set Exam Window & Duration for Test {bulkStartModal.idx + 1} of {bulkStartQueue.length}</h3>
+            <div className="mb-4">
+              <label className="block mb-1">Start Date & Time</label>
+              <input type="datetime-local" className="input w-full" value={bulkStartModal.start} onChange={e => setBulkStartModal(w => ({ ...w, start: e.target.value }))} />
+            </div>
+            <div className="mb-4">
+              <label className="block mb-1">End Date & Time</label>
+              <input type="datetime-local" className="input w-full" value={bulkStartModal.end} onChange={e => setBulkStartModal(w => ({ ...w, end: e.target.value }))} />
+            </div>
+            <div className="mb-4">
+              <label className="block mb-1">Duration (minutes)</label>
+              <input type="number" min="1" className="input w-full" value={bulkStartModal.duration} onChange={e => setBulkStartModal(w => ({ ...w, duration: e.target.value }))} placeholder="Enter duration in minutes" />
+            </div>
+            <div className="flex space-x-2">
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={handleBulkStartNext}
+                disabled={!bulkStartModal.start || !bulkStartModal.end || !bulkStartModal.duration || loading}
+              >
+                {bulkStartModal.idx + 1 === bulkStartQueue.length ? 'Start Last Test' : 'Start & Next'}
+              </button>
+              <button className="px-4 py-2 bg-gray-400 text-white rounded" onClick={handleBulkStartCancel}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Test Settings Modal */}
       {editModal.open && (
@@ -671,6 +794,7 @@ function ManageTestsTable() {
   };
   const closeViewQModal = () => setViewQModal({ open: false, questions: [], testTitle: '' });
   const [tests, setTests] = useState([]);
+  const allSelected = tests.length > 0 && selectedTests.length === tests.length;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

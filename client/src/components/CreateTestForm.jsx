@@ -12,6 +12,7 @@ const CreateTestForm = () => {
   const [error, setError] = useState('');
   const [requireAllQuestions, setRequireAllQuestions] = useState(true);
   const [allowNavigation, setAllowNavigation] = useState(true);
+  const [passingScore, setPassingScore] = useState(40);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,12 +24,14 @@ const CreateTestForm = () => {
         description,
         instructions,
         requireAllQuestions,
-        allowNavigation
+        allowNavigation,
+        passingScore
       });
       setSuccess('Test created successfully!');
-  setTitle(''); setDescription(''); setInstructions('');
-  setRequireAllQuestions(true);
-  setAllowNavigation(true);
+      setTitle(''); setDescription(''); setInstructions('');
+      setRequireAllQuestions(true);
+      setAllowNavigation(true);
+      setPassingScore(40);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create test');
     } finally {
@@ -43,7 +46,7 @@ const CreateTestForm = () => {
           <button key={cat} className={`px-4 py-2 rounded ${tab === cat ? 'bg-blue-600 text-white' : 'bg-gray-200'}`} onClick={() => setTab(cat)}>{cat} Round</button>
         ))}
       </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
+  <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input className="input" placeholder="Test Title" value={title} onChange={e => setTitle(e.target.value)} required />
           <input className="input" placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
@@ -55,6 +58,18 @@ const CreateTestForm = () => {
             value={instructions}
             onChange={e => setInstructions(e.target.value)}
             rows={4}
+          />
+        </div>
+        <div>
+          <label className="block font-medium mb-1">Passing Percentage (%)</label>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            className="input w-32"
+            value={passingScore}
+            onChange={e => setPassingScore(Number(e.target.value))}
+            required
           />
         </div>
         <div className="flex flex-col md:flex-row gap-4">

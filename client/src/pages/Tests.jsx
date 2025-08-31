@@ -85,7 +85,7 @@ const Tests = () => {
   };
 
   const handleStartTest = (testId) => {
-    navigate(`/tests/${testId}`);
+    navigate(`/starttest/${testId}`);
   };
 
   if (loading) {
@@ -149,7 +149,7 @@ const Tests = () => {
                 
                 <div className="flex items-center text-sm text-gray-600">
                   <Users className="w-4 h-4 mr-2" />
-                  <span>Passing: {test.passingScore}%</span>
+                  <span>Passing: {test.passingScore != null && test.passingScore !== '' ? test.passingScore + '%' : 'N/A'}</span>
                 </div>
               </div>
 

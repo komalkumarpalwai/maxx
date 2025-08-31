@@ -19,7 +19,7 @@ const Login = () => {
   const [loginError, setLoginError] = useState('');
   
   // Debug: Show current API URL
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+  const apiUrl = process.env.REACT_APP_API_URL;
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -107,12 +107,6 @@ const Login = () => {
           <p className="mt-2 text-sm text-gray-600">
             Sign in to your Max Solutions account
           </p>
-          {/* Debug info - remove after fixing */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-2 p-2 bg-yellow-100 rounded text-xs">
-              API URL: {apiUrl}
-            </div>
-          )}
         </div>
 
         <div className="card">

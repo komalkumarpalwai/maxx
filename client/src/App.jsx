@@ -28,6 +28,7 @@ import About from './pages/About';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Terms from './pages/Terms';
 import Copyright from './pages/Copyright';
+import StartTest from './pages/StartTest';
 
 function App() {
   useEffect(() => {
@@ -235,6 +236,13 @@ function App() {
                       <main className="p-6"><AdminAnalytics /></main>
                     </div>
                   </div>
+                </ProtectedRoute>
+              } />
+
+              {/* StartTest route without Sidebar, Navbar, Footer */}
+              <Route path="/starttest/:id" element={
+                <ProtectedRoute>
+                  <main className="p-6 flex-1"><StartTest /></main>
                 </ProtectedRoute>
               } />
 
