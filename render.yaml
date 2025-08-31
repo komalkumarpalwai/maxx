@@ -1,11 +1,18 @@
 services:
   - type: web
-    name: maxx-2
+    name: maxx-frontend
     env: static
     rootDir: client
-    buildCommand: npm ci && npm run build
-    staticPublishPath: ./build
-    routes:
-      - type: rewrite
-        source: /*
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    redirects:
+      - source: /*
         destination: /index.html
+        status: 200
