@@ -1,67 +1,28 @@
 Max Solutions Platform
 
-
-
-
-
-
-
-
-
-
-
-
 A full-stack web platform for engineering excellence and comprehensive testing, built with React.js + Node.js/Express + MongoDB Atlas + TailwindCSS.
 
 🚀 Features
 
-🔒 User Management: Secure registration, login, profile handling
+🔒 User Management: Registration, login, profile handling
 
 📝 Test System: Communication, Quantitative, Technical, Interview
 
 📅 Smart Scheduling: One attempt per test per week per student
 
-📊 Real-time Dashboard: Live test results & performance tracking
+📊 Real-time Dashboard: Live results & performance tracking
 
-👨‍💻 Admin Control: Full test creation, management, analytics
+👨‍💻 Admin Control: Test creation, management, analytics
 
-📱 Responsive Design: Optimized for speed & mobile-first
+📱 Responsive Design: Mobile-friendly, fast UI
 
-🏗️ Project Structure
-maxx/
-├── server/       # Backend (Node.js/Express)
-├── client/       # Frontend (React + TailwindCSS)
-├── package.json  # Root dependencies
-├── env.example   # Environment variables template
-└── README.md
-
-🛠️ Tech Stack
-Backend	Frontend
-Node.js	React 18
-Express.js	React Router
-MongoDB Atlas	TailwindCSS
-Mongoose	Axios
-JWT	React Hot Toast
-bcryptjs	Lucide React
-multer	
-cors	
-📋 Prerequisites
-
-Node.js v16+
-
-npm or yarn
-
-MongoDB Atlas account
-
-Git
-
-⚡ Quick Start
+⚡ Quick Installation & Setup
 1️⃣ Clone Repository
 git clone <repository-url>
 cd maxx
 
 2️⃣ Install Dependencies
-npm install         # Root
+npm install         # Root dependencies
 cd client && npm install
 cd ..
 
@@ -69,15 +30,15 @@ cd ..
 cp env.example .env
 
 
-Update .env with:
+Update .env with your configuration:
 
 PORT=5000
 NODE_ENV=development
-MONGO_URI=mongodb+srv://<username>:<password>@maxsolutions.6pxdhuv.mongodb.net/maxsolutions
-JWT_SECRET=your-super-secret-jwt-key-here
+MONGO_URI=your-mongodb-uri
+JWT_SECRET=your-jwt-secret
 CLIENT_URL=http://localhost:3000
 
-4️⃣ Run App
+4️⃣ Run Application
 # Development (frontend + backend)
 npm run dev
 
@@ -90,128 +51,28 @@ npm run client
 # Production
 npm start
 
-🌐 API Endpoints
+🛠️ Tech Stack
 
-Authentication
+Frontend: React 18, TailwindCSS, React Router, Axios
 
-POST /api/auth/register – Register
+Backend: Node.js, Express.js, MongoDB Atlas, Mongoose
 
-POST /api/auth/login – Login
+Authentication: JWT, bcryptjs
 
-GET /api/auth/me – Current user info
-
-Profile Management
-
-GET /api/profile/:id – Get profile
-
-PUT /api/profile – Update profile
-
-POST /api/profile/upload-pic – Upload avatar
-
-Test Management
-
-GET /api/tests – All tests
-
-GET /api/tests/:id – Test by ID
-
-POST /api/tests – Create test (Admin)
-
-PUT /api/tests/:id – Update test (Admin)
-
-DELETE /api/tests/:id – Delete test (Admin)
-
-POST /api/tests/:id/submit – Submit test result
-
-GET /api/tests/results/student – Student results
-
-GET /api/tests/results/all – Admin results
-
-👤 Database Schemas
-
-User
-
-{
-  name, email, rollNo, password,
-  college, year, branch, profilePic,
-  role, isActive, createdAt, updatedAt
-}
-
-
-Test
-
-{
-  title, category, description,
-  duration, totalQuestions, passingScore,
-  startDate, endDate, questions, createdBy,
-  isActive
-}
-
-🔐 Security & Auth
-
-JWT authentication (7-day expiry)
-
-bcryptjs password hashing
-
-Role-based access: Student / Faculty / Admin
-
-Protected routes via middleware
-
-Weekly attempt limits
-
-🎨 UI Components
-
-Buttons, Inputs, Selects
-
-Avatar with fallback
-
-Navbar & Sidebar navigation
-
-📱 Design Philosophy
-
-✅ Simple & Professional
-
-⚡ Fast & Performance-focused
-
-📱 Mobile-first & Responsive
-
-♿ Accessible & Clean
-
-🚀 Deployment
-
-Backend
-
-Set NODE_ENV=production
-
-Update production MongoDB URI & JWT secret
-
-Deploy to Heroku / Railway / DigitalOcean
-
-Frontend
-
-Build: npm run build
-
-Deploy to Vercel / Netlify / AWS S3
+Utilities: Multer, CORS, React Hot Toast, Lucide React
 
 🤝 Contributing
 
-Fork repo → create branch
+Fork the repository
 
-Implement features → test
+Create a feature branch
 
-Submit Pull Request
+Make your changes
 
-🔮 Future Enhancements
+Test thoroughly
 
-Email verification & password reset
+Submit a pull request
 
-Advanced analytics dashboard
+📄 License
 
-Real-time notifications
-
-Mobile app
-
-API rate limiting & performance benchmarking
-
-New question types
-
-Built with ❤️ by Max Solutions Team
+This project is licensed under the MIT License.
