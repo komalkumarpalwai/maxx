@@ -1,3 +1,5 @@
+live link: https://maxsolutions.netlify.app/
+
 Max Solutions Platform
 
 A full-stack web platform for engineering excellence and comprehensive testing, built with React.js + Node.js/Express + MongoDB Atlas + TailwindCSS.
