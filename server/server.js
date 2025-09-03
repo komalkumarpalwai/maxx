@@ -32,18 +32,22 @@ app.use(
   })
 ); // Security headers, but allow cross-origin cookies
 
+// ✅ Allowed origins
 const allowedOrigins = [
-  'https://maxsolutions.netlify.app',
-  'https://maxx-2-6gde.onrender.com',
+  'https://maxisolutions.netlify.app',  // fixed domain
+  'https://maxsolutions.netlify.app',   // keep in case of second deployment
+  'https://maxx-2-6gde.onrender.com',   // render server
 ];
+
+// ✅ CORS config
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, etc.)
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // allow curl/postman with no origin
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       } else {
+        console.warn(`❌ CORS blocked: ${origin}`);
         return callback(new Error('Not allowed by CORS'));
       }
     },
@@ -52,6 +56,10 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+// ✅ Handle preflight
+app.options('*', cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -162,7 +170,7 @@ async function backfillTestCodes() {
 
 app.listen(PORT, async () => {
   console.log(`🚀 Max Solutions Server running on port ${PORT}`);
-  console.log(`📱 Client URL: ${process.env.CLIENT_URL || 'https://maxx-2.netlify.app'}`);
+  console.log(`📱 Client URL: ${process.env.CLIENT_URL || 'https://maxisolutions.netlify.app'}`);
   await createDefaultAdmin();
   await backfillTestCodes();
 });
